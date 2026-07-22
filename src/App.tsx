@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
 
-const API_BASE_URL = 'https://exam-monsters-album-picture.trycloudflare.com/api';
+const API_BASE_URL = 'https://api.miniheealthstation.com';
 const API_KEY = 'ThapPhrik_Secret_Key_9988';
 
 function App() {
