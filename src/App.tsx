@@ -102,13 +102,10 @@ function App() {
       setPatientPhoto(img_str);
 
       try {
-        const jhcisResponse = await axios.get(`https://exam-monsters-album-picture.trycloudflare.com/jhcis-api/patient/${cid}`, {
-  headers: { 
-    'x-api-key': API_KEY,
-    'ngrok-skip-browser-warning': 'true' // 👈 เพิ่มบรรทัดนี้
-  }, 
-  timeout: 4000 
-});
+  const jhcisResponse = await axios.get(`https://api.miniheealthstation.com/jhcis-api/patient/${cid}`, {
+    headers: { 'x-api-key': API_KEY }, 
+    timeout: 4000 
+  });
         if (jhcisResponse.data.success) {
           setPatient({ ...jhcisResponse.data.data, cid: cid }); 
         } else {
@@ -141,13 +138,10 @@ function App() {
     setManualIdError('');
     
     try {
-     const response = await axios.get(`https://exam-monsters-album-picture.trycloudflare.com/jhcis-api/patient/${manualIdInput}`, { 
-  headers: { 
-    'x-api-key': API_KEY,
-    'ngrok-skip-browser-warning': 'true' // 👈 เพิ่มบรรทัดนี้
-  }, 
-  timeout: 5000 
-});
+  const response = await axios.get(`https://api.miniheealthstation.com/jhcis-api/patient/${manualIdInput}`, { 
+    headers: { 'x-api-key': API_KEY }, 
+    timeout: 5000 
+  });
       
       if (response.data.success) {
         setPatient({ ...response.data.data, cid: manualIdInput });
@@ -435,13 +429,10 @@ function App() {
         sugar: vitals.sugar === '' || vitals.sugar === '---' ? 0 : parseInt(vitals.sugar)
       };
       
-      const response = await axios.post(`https://exam-monsters-album-picture.trycloudflare.com/jhcis-api/queue`, payload, {
-  headers: { 
-    'x-api-key': API_KEY,
-    'ngrok-skip-browser-warning': 'true' // 👈 เติมบรรทัดนี้ลงไปครับ
-  },
-  timeout: 5000 
-});
+      const response = await axios.post(`https://api.miniheealthstation.com/jhcis-api/queue`, payload, {
+    headers: { 'x-api-key': API_KEY },
+    timeout: 5000 
+  });
 
       if (response.data || response.status === 200) {
         setNotifyModal({ show: true, isSuccess: true, title: 'จัดคิวสำเร็จ!', message: 'ส่งข้อมูลผู้ป่วยเข้าสู่ระบบ JHCIS เรียบร้อยแล้ว' });

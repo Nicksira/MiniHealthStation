@@ -11,8 +11,7 @@ const API_KEY = 'ThapPhrik_Secret_Key_9988';
 app.use(cors({
     origin: '*', 
     methods: ['GET', 'POST', 'OPTIONS'],
-    // 👇 เพิ่ม 'ngrok-skip-browser-warning' เข้าไปตรงนี้
-    allowedHeaders: ['Content-Type', 'x-api-key', 'ngrok-skip-browser-warning'] 
+    allowedHeaders: ['Content-Type', 'x-api-key'] // ลบ ngrok ออก เหลือแค่นี้พอครับ
 }));
 
 // 🟢 2. คำสั่งนี้สำคัญมาก (ห้ามลบ): สอนให้ Node.js อ่านข้อมูลที่ส่งมาจากหน้าจอ Kiosk
