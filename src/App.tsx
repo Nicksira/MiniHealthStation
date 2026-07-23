@@ -724,43 +724,72 @@ function App() {
           </div>
           
           <div className="photo-container">
-          {/* ระบบจะเช็คว่ามีรูปจาก JHCIS ไหม ถ้ามีให้แสดงรูปจริง ถ้าไม่มีให้แสดงไอคอนสีเทา */}
-          {patientImage ? (
-            <img 
-              src={patientImage} 
-              alt="รูปผู้ป่วยจาก JHCIS" 
-              className="patient-photo-real" 
-            />
-          ) : (
-            <div className="patient-photo-placeholder">
-               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9ca3af" width="80px" height="80px">
-                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-               </svg>
+            {/* 🌟 สร้าง Wrapper กรอบจำกัดพื้นที่ เพื่อล็อกปุ่มให้อยู่มุมขวาล่างของรูปเสมอ */}
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              
+              {/* ระบบจะเช็คว่ามีรูปจาก JHCIS ไหม ถ้ามีให้แสดงรูปจริง ถ้าไม่มีให้แสดงไอคอนสีเทา */}
+              {patientImage ? (
+                <img 
+                  src={patientImage} 
+                  alt="รูปผู้ป่วยจาก JHCIS" 
+                  className="patient-photo-real" 
+                />
+              ) : (
+                <div className="patient-photo-placeholder">
+                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9ca3af" width="80px" height="80px">
+                     <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                   </svg>
+                </div>
+              )}
+
+              {/* 🌟 ปุ่มกล้องแบบวงกลมมุมขวาล่าง (ใช้ FontAwesome) */}
+              <label 
+                style={{
+                  position: 'absolute',
+                  bottom: '-10px',  // ขยับลงมาเหลื่อมกรอบรูปล่างนิดนึง
+                  right: '-15px',   // ขยับไปทางขวาให้ลอยเด่นออกมา
+                  width: '45px',
+                  height: '45px',
+                  backgroundColor: '#2563eb', // สีฟ้า Enterprise
+                  color: 'white',
+                  borderRadius: '50%',        // ทำให้เป็นวงกลม
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: isUploadingPhoto ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 10px rgba(0,0,0,0.25)', // เงาให้ปุ่มลอยขึ้นมา
+                  border: '3px solid white',  // ขอบขาวตัดกับรูปให้ดูพรีเมียม
+                  transition: 'transform 0.2s ease, background-color 0.2s ease',
+                  zIndex: 15
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.1)';
+                  e.currentTarget.style.backgroundColor = '#1d4ed8';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.backgroundColor = '#2563eb';
+                }}
+                title="ถ่ายรูปใหม่"
+              >
+                {/* ถ้ากำลังอัปโหลดให้หมุนๆ ถ้าปกติให้โชว์รูปกล้อง */}
+                {isUploadingPhoto ? (
+                  <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '18px' }}></i>
+                ) : (
+                  <i className="fa-solid fa-camera" style={{ fontSize: '18px' }}></i>
+                )}
+                
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  capture="user" 
+                  style={{ display: 'none' }} 
+                  onChange={handleCapturePhoto}
+                  disabled={isUploadingPhoto}
+                />
+              </label>
             </div>
-        )} {/* 🛑 จุดนี้ครับ! คุณสิรภพลืมใส่ )} ปิดท้ายก่อนปุ่มเปิดกล้อง */}
-        {/* 🌟 ปุ่มเปิดกล้อง Tablet ซ่อนอยู่ตรงนี้ */}
-          <label style={{
-            position: 'absolute',
-            bottom: '-15px',
-            background: '#1d4ed8',
-            color: 'white',
-            padding: '5px 15px',
-            borderRadius: '20px',
-            fontSize: '14px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.2)'
-          }}>
-            {isUploadingPhoto ? 'กำลังบันทึก...' : '📷 ถ่ายรูปใหม่'}
-            <input 
-              type="file" 
-              accept="image/*" 
-              capture="user" // โค้ดพระเอก: สั่งบังคับเปิดแอปกล้องถ่ายรูปของ Tablet ทันที
-              style={{ display: 'none' }} 
-              onChange={handleCapturePhoto}
-              disabled={isUploadingPhoto}
-            />
-          </label>
-        </div>
+          </div>
 
           <div className="device-buttons">
             <button className="btn-device" onClick={connectBluetoothO2} style={{ border: '2px solid #3b82f6' }}>
