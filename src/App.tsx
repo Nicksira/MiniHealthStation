@@ -97,43 +97,62 @@ function App() {
     }
   };
 
-  // 2. ฟังก์ชันถ่ายรูป (ดึงข้อมูล IP จากตั้งค่า และใช้ CID ของจริง)
+  // 2. ฟังก์ชันถ่ายรูป (พร้อมระบบบีบอัดภาพ God Tier และแจ้งเตือน)
   const handleCapturePhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64String = reader.result as string;
-      setPatientImage(base64String); // โชว์รูปหน้าจอทันที
-      
-      const currentCid = patient?.cid; // 🛑 ดึงเลข 13 หลักจาก State ปัจจุบันจริงๆ
-      if (!currentCid) return;
+    reader.onloadend = () => {
+      // 🌟 สร้าง Canvas เพื่อบีบอัดรูปภาพก่อนส่ง
+      const img = new Image();
+      img.src = reader.result as string;
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        // จำกัดความกว้างสูงสุดแค่ 600px (ประหยัดพื้นที่ Database JHCIS)
+        const MAX_WIDTH = 600; 
+        const scaleSize = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scaleSize;
+        
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // แปลงรูปเป็น JPEG และลดคุณภาพลงเหลือ 70% (เหลือไม่กี่สิบ KB)
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        
+        setPatientImage(compressedBase64); // โชว์รูปที่บีบอัดแล้วหน้าจอทันที
+        
+        const currentCid = patient?.cid;
+        if (!currentCid) return;
 
-      try {
-        setIsUploadingPhoto(true);
-        // 🛑 ยิงไปที่ IP ตามหน้าตั้งค่า
-        const response = await fetch(`http://${config.host}:${config.port}/jhcis-api/upload-photo`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': 'ThapPhrik_Secret_Key_9988'
-          },
-          body: JSON.stringify({
-            cid: currentCid,
-            image: base64String
-          })
-        });
+        try {
+          setIsUploadingPhoto(true);
+          const response = await fetch(`http://${config.host}:${config.port}/jhcis-api/upload-photo`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': 'ThapPhrik_Secret_Key_9988'
+            },
+            body: JSON.stringify({
+              cid: currentCid,
+              image: compressedBase64
+            })
+          });
 
-        const data = await response.json();
-        if (data.success) {
-          console.log('อัปโหลดรูปลง DB JHCIS สำเร็จ!');
+          const data = await response.json();
+          if (data.success) {
+            alert('📸 บันทึกรูปภาพลงฐานข้อมูลสำเร็จ!'); // แจ้งเตือนเมื่อสำเร็จชัวร์ๆ
+          } else {
+            alert(`❌ บันทึกรูปไม่สำเร็จ: ${data.message}`);
+          }
+        } catch (error: any) {
+          console.error("อัปโหลดรูปไม่สำเร็จ:", error);
+          alert(`❌ การเชื่อมต่อล้มเหลว (เช็ก IP หรือ Chrome Flags): ${error.message}`);
+        } finally {
+          setIsUploadingPhoto(false);
         }
-      } catch (error) {
-        console.error("อัปโหลดรูปไม่สำเร็จ:", error);
-      } finally {
-        setIsUploadingPhoto(false);
-      }
+      };
     };
     
     reader.readAsDataURL(file);
