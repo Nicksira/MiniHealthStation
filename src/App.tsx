@@ -913,7 +913,7 @@ function App() {
                 <i className="fa-solid fa-phone-slash"></i> วางสาย / กลับหน้าหลัก
               </button>
             </div>
-            <iframe src="https://meet.jit.si/ThapPhrikHealthStationTelemedRoom#config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.startWithVideoMuted=false&interfaceConfig.TOOLBAR_BUTTONS=['microphone','camera','fullscreen','hangup']" allow="camera; microphone; fullscreen; display-capture; autoplay" style={{ width: '100%', flex: 1, border: 'none', background: '#0f172a' }}></iframe>
+            <iframe src="https://meet.jit.si/ThapPhrikHealthStationTelemedRoom#config.disableDeepLinking=true&config.prejoinPageEnabled=false&config.startWithAudioMuted=false&config.startWithVideoMuted=false&interfaceConfig.TOOLBAR_BUTTONS=['microphone','camera','fullscreen','hangup']" allow="camera; microphone; fullscreen; display-capture; autoplay" style={{ width: '100%', flex: 1, border: 'none', background: '#0f172a' }}></iframe>
           </div>
         </div>
       )}
