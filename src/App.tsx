@@ -53,15 +53,10 @@ function App() {
     hospName: localStorage.getItem('config_hospName') || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทับพริก [02506]'
   });
 
-  // 1. เพิ่ม State สำหรับเก็บรูปภาพคนไข้ (Base64)
-  const [patientImage, setPatientImage] = useState<string | null>(null);
 
   // 🛑 เติมบรรทัดนี้ลงไปครับ! สำคัญมาก เพื่อป้องกันหน้าจอขาว หรือปุ่มค้าง 🛑
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
-  // 1. ฟังก์ชันดึงรูป ทะลวง Cache 100%
-  const fetchPatientPhoto = async (cid: string) => {
-    // ... โค้ดเดิม ...
 
   const [vitals, setVitals] = useState({
     height: '---', weight: '---', waist: '---',
