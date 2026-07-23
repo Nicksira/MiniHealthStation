@@ -392,13 +392,39 @@ function App() {
 
   const handleVitalChange = (field: string, value: string) => {
     setVitals(prev => {
-      const newVitals = { ...prev, [field]: value };
+      let finalValue = value;
+
+      // 🛑 โลจิกจัดการช่องความดันโลหิต (sysDia) แบบอัตโนมัติ
+      if (field === 'sysDia') {
+        // 1. อนุญาตให้พิมพ์ได้เฉพาะตัวเลขและเครื่องหมาย / เท่านั้น
+        finalValue = finalValue.replace(/[^\d/]/g, '');
+        
+        // 2. เช็คว่าคนไข้กำลัง "ลบข้อมูล" อยู่หรือไม่ (เพื่อไม่ให้ / เด้งกลับมาตอนกด Backspace)
+        const isDeleting = prev.sysDia !== '---' && finalValue.length < prev.sysDia.length;
+        
+        if (!isDeleting) {
+          // 3. ถ้าพิมพ์ตัวเลขครบ 3 หลักและยังไม่มี / ให้เติม / อัตโนมัติ
+          if (finalValue.length === 3 && !finalValue.includes('/')) {
+            finalValue += '/';
+          }
+        }
+        
+        // 4. ป้องกันการเผลอพิมพ์เครื่องหมาย / ซ้ำซ้อน (เช่น 120//80)
+        if (finalValue.split('/').length > 2) {
+          finalValue = prev.sysDia;
+        }
+      }
+
+      const newVitals = { ...prev, [field]: finalValue };
+
+      // ส่วนคำนวณ BMI อัตโนมัติ (คงไว้เหมือนเดิม)
       if (field === 'height' || field === 'weight') {
-        const h = parseFloat(field === 'height' ? value : prev.height) / 100;
-        const w = parseFloat(field === 'weight' ? value : prev.weight);
+        const h = parseFloat(field === 'height' ? finalValue : prev.height) / 100;
+        const w = parseFloat(field === 'weight' ? finalValue : prev.weight);
         if (h > 0 && w > 0) newVitals.bmi = (w / (h * h)).toFixed(2);
         else newVitals.bmi = '---';
       }
+      
       return newVitals;
     });
   };
