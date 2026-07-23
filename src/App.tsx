@@ -71,15 +71,16 @@ function App() {
   // 1. ฟังก์ชันดึงรูป ทะลวง Cache 100%
   const fetchPatientPhoto = async (cid: string) => {
     try {
-      // 🛑 เพิ่ม ?t=เวลา เพื่อบังคับเบราว์เซอร์โหลดรูปใหม่จาก Database เสมอ
       const timestamp = new Date().getTime();
-      const response = await fetch(`http://${config.host}:${config.port}/jhcis-api/photo/${cid}?t=${timestamp}`, {
+      // 🌟 เปลี่ยนจาก http://${config.host} เป็นโดเมน HTTPS หลักของระบบ
+      const response = await fetch(`${API_BASE_URL}/jhcis-api/photo/${cid}?t=${timestamp}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': 'ThapPhrik_Secret_Key_9988'
+          'x-api-key': API_KEY
         }
       });
+      // ... (โค้ดด้านล่างเหมือนเดิม)
       
       if (response.ok) {
         const data = await response.json();
@@ -128,11 +129,12 @@ function App() {
 
         try {
           setIsUploadingPhoto(true);
-          const response = await fetch(`http://${config.host}:${config.port}/jhcis-api/upload-photo`, {
+          // 🌟 เปลี่ยนจาก http://${config.host} เป็นโดเมน HTTPS หลักของระบบ
+          const response = await fetch(`${API_BASE_URL}/jhcis-api/upload-photo`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-api-key': 'ThapPhrik_Secret_Key_9988'
+              'x-api-key': API_KEY
             },
             body: JSON.stringify({
               cid: currentCid,
