@@ -141,6 +141,42 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
     }
 });
 
+// ==========================================
+// 🎯 API 3: ดึงรูปภาพคนไข้จาก JHCIS (personphoto)
+// ==========================================
+app.get('/jhcis-api/photo/:cid', checkApiKey, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        // คำสั่ง SQL ทะลวงหารูปจากตาราง personphoto
+        const sql = `
+            SELECT personphoto.photo 
+            FROM person 
+            INNER JOIN personphoto 
+                ON person.pid = personphoto.pid 
+                AND person.pcucodeperson = personphoto.pcucodeperson 
+            WHERE person.idcard = ?
+        `;
+        
+        const [rows] = await connection.execute(sql, [req.params.cid]);
+        await connection.end();
+
+        // ตรวจสอบว่าพบรูปภาพหรือไม่ (ต้องแน่ใจว่า field photo ไม่เป็น null)
+        if (rows.length > 0 && rows[0].photo) {
+            // แปลงข้อมูล BLOB (Buffer) ให้เป็นสตริง Base64 เพื่อส่งเข้าหน้าเว็บ
+            const base64Image = Buffer.from(rows[0].photo).toString('base64');
+            res.status(200).json({ success: true, image: base64Image });
+        } else {
+            res.status(404).json({ success: false, message: 'ไม่พบรูปภาพในระบบ' });
+        }
+    } catch (error) {
+        if (connection) await connection.end();
+        console.error('❌ ดึงรูปคนไข้ล้มเหลว (SQL Error):', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 JHCIS API รอรับข้อมูลจาก Kiosk ที่พอร์ต ${PORT}`);
 });

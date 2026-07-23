@@ -59,6 +59,37 @@ function App() {
     sysDia: '---', pulse: '---', sugar: '---'
   });
 
+  // 1. เพิ่ม State สำหรับเก็บรูปภาพคนไข้ (Base64)
+  const [patientImage, setPatientImage] = useState<string | null>(null);
+
+  // 2. สร้างฟังก์ชันดึงรูปจากฐานข้อมูล JHCIS (ดึงผ่าน API หลังบ้าน)
+  const fetchPatientPhoto = async (cid: string) => {
+    try {
+      // ⚠️ เปลี่ยน 192.168.x.x เป็น IP จริงของเครื่อง Windows Server
+      const response = await fetch(`http://26.62.30.1:3000/jhcis-api/photo/${cid}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': 'ThapPhrik_Secret_Key_9988' // 👈 ส่งกุญแจลับไปปลดล็อก API
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.image) {
+          setPatientImage(`data:image/jpeg;base64,${data.image}`);
+        } else {
+          setPatientImage(null);
+        }
+      } else {
+        setPatientImage(null); 
+      }
+    } catch (error) {
+      console.error("ไม่สามารถดึงรูปจาก JHCIS ได้:", error);
+      setPatientImage(null);
+    }
+  };
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -634,14 +665,21 @@ function App() {
           </div>
           
           <div className="photo-container">
-            {patientPhoto ? ( 
-              <img src={`data:image/jpeg;base64,${patientPhoto}`} alt="Patient" className="patient-photo-real" /> 
-            ) : ( 
-              <div className="patient-photo-placeholder">
-                <i className="fa-solid fa-user" style={{ color: 'rgb(65, 64, 61)', fontSize: '90px' }}></i>
-              </div> 
-            )}
-          </div>
+          {/* ระบบจะเช็คว่ามีรูปจาก JHCIS ไหม ถ้ามีให้แสดงรูปจริง ถ้าไม่มีให้แสดงไอคอนสีเทา */}
+          {patientImage ? (
+            <img 
+              src={patientImage} 
+              alt="รูปผู้ป่วยจาก JHCIS" 
+              className="patient-photo-real" 
+            />
+          ) : (
+            <div className="patient-photo-placeholder">
+               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9ca3af" width="80px" height="80px">
+                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+               </svg>
+            </div>
+          )}
+        </div>
 
           <div className="device-buttons">
             <button className="btn-device" onClick={connectBluetoothO2} style={{ border: '2px solid #3b82f6' }}>
