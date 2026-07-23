@@ -107,6 +107,58 @@ function App() {
     }
   }, [vitals.sysDia]);
 
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  // ฟังก์ชันถ่ายรูปและอัปโหลด
+  const handleCapturePhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // เรากำลังอ่านไฟล์ภาพที่ถ่ายจาก Tablet
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64String = reader.result as string;
+      
+      // 1. อัปเดตโชว์ที่หน้าจอทันทีให้คนไข้เห็น
+      setPatientImage(base64String);
+      
+      // 2. ดึงเลข 13 หลักจาก State ปัจจุบัน (สมมติว่าคุณสิรภพเก็บไว้ในตัวแปร currentCid หรือดึงจากข้อมูลคนไข้)
+      // 🛑 แก้บรรทัดนี้ ให้ดึงเลข 13 หลักจากตัวแปร patient จริงๆ
+      const currentCid = patient?.cid; 
+
+      if (!currentCid) return;
+
+      try {
+        setIsUploadingPhoto(true);
+        // 🛑 แก้บรรทัดนี้ ให้ยิง API ไปที่ IP ที่ตั้งค่าไว้ (หรือ 26.62.30.1 ที่ใช้อยู่)
+        const response = await fetch(`http://${config.host}:${config.port}/jhcis-api/upload-photo`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': 'ThapPhrik_Secret_Key_9988'
+          },
+          body: JSON.stringify({
+            cid: currentCid,
+            image: base64String
+          })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          // ถ่ายเสร็จ บันทึกเสร็จเรียบร้อย!
+          console.log('อัปโหลดรูปสำเร็จระดับ Enterprise!');
+        }
+      } catch (error) {
+        console.error("อัปโหลดรูปไม่สำเร็จ:", error);
+      } finally {
+        setIsUploadingPhoto(false);
+      }
+    };
+    
+    // บีบอัดและแปลงรูปเป็น Base64
+    reader.readAsDataURL(file);
+  };
+
   const updateDeviceName = (key: string, name: string) => {
     setDevices(prev => ({ ...prev, [key]: name }));
     localStorage.setItem(`dev_${key}`, name);
@@ -146,11 +198,16 @@ function App() {
         setPatient({ cid: cid, fname: cardData.fname, lname: cardData.lname, chronic: 'ไม่สามารถดึงข้อมูลโรคได้' });
       }
 
+      // ... โค้ดเดิม
       axios.post('http://localhost:8189/api/nhso-authen', {
           pid: cid, claimType: "PG0060001", mobile: "0000000000", correlationId: "MiniHealthStation-001"
       }).catch(() => {});
 
+      // 🛑 สั่งให้ระบบวิ่งไปดึงรูปจากฐานข้อมูล JHCIS ทันที
+      await fetchPatientPhoto(cid); 
+
       setIsLoggedIn(true);
+      // ... โค้ดเดิม
     } catch (error) {
       alert("ระบบประมวลผลขัดข้อง");
     } finally {
@@ -174,14 +231,16 @@ function App() {
     timeout: 5000 
   });
       
+      // ... โค้ดเดิม
       if (response.data.success) {
         setPatient({ ...response.data.data, cid: manualIdInput });
-        setPatientPhoto(null); 
         
-        // 🚨 สิ่งที่เพิ่มเข้ามา: สั่งเปิดโหมด Testing (โหมดแมนนวล) เพื่อบอกระบบให้เลิกเช็กเครื่องอ่านบัตร
+        // 🛑 สั่งให้ระบบวิ่งไปดึงรูปจากฐานข้อมูล JHCIS ทันที
+        await fetchPatientPhoto(manualIdInput); 
+        
         setIsTestingMode(true); 
-        
         setIsLoggedIn(true);
+      // ... โค้ดเดิม
         setShowManualIdModal(false); 
         setManualIdInput(''); 
       }
@@ -678,7 +737,29 @@ function App() {
                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
                </svg>
             </div>
-          )}
+        )} {/* 🛑 จุดนี้ครับ! คุณสิรภพลืมใส่ )} ปิดท้ายก่อนปุ่มเปิดกล้อง */}
+        {/* 🌟 ปุ่มเปิดกล้อง Tablet ซ่อนอยู่ตรงนี้ */}
+          <label style={{
+            position: 'absolute',
+            bottom: '-15px',
+            background: '#1d4ed8',
+            color: 'white',
+            padding: '5px 15px',
+            borderRadius: '20px',
+            fontSize: '14px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.2)'
+          }}>
+            {isUploadingPhoto ? 'กำลังบันทึก...' : '📷 ถ่ายรูปใหม่'}
+            <input 
+              type="file" 
+              accept="image/*" 
+              capture="user" // โค้ดพระเอก: สั่งบังคับเปิดแอปกล้องถ่ายรูปของ Tablet ทันที
+              style={{ display: 'none' }} 
+              onChange={handleCapturePhoto}
+              disabled={isUploadingPhoto}
+            />
+          </label>
         </div>
 
           <div className="device-buttons">

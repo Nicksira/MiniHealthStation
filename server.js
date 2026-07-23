@@ -1,6 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ตั้งค่า Path สำหรับเซฟรูปภาพ
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
@@ -173,6 +180,72 @@ app.get('/jhcis-api/photo/:cid', checkApiKey, async (req, res) => {
     } catch (error) {
         if (connection) await connection.end();
         console.error('❌ ดึงรูปคนไข้ล้มเหลว (SQL Error):', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ==========================================
+// 🎯 API 4: อัปโหลดรูปจาก Kiosk ลง JHCIS และเซฟเป็นไฟล์เลข 13 หลัก
+// ==========================================
+app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
+    const { cid, image } = req.body;
+    
+    if (!cid || !image) {
+        return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบถ้วน (ต้องการ CID และ Image)' });
+    }
+
+    let connection;
+    try {
+        // 1. แปลงรูป Base64 กลับเป็นไฟล์ไบนารี (Buffer)
+        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+
+        // 2. ระบบ Backup: เซฟเป็นไฟล์ .jpg ตั้งชื่อตามเลข 13 หลัก
+        const uploadDir = path.join(__dirname, 'patient_photos');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir); // สร้างโฟลเดอร์อัตโนมัติถ้ายังไม่มี
+        }
+        const filePath = path.join(uploadDir, `${cid}.jpg`);
+        fs.writeFileSync(filePath, imageBuffer);
+        console.log(`📸 เซฟไฟล์รูปภาพสำเร็จ: ${cid}.jpg`);
+
+        // 3. ระบบ Database: นำรูปอัปเดตลงตาราง personphoto ของ JHCIS
+        connection = await mysql.createConnection(dbConfig);
+        
+        // หา pid ก่อน
+        const [personRows] = await connection.execute('SELECT pid, pcucodeperson FROM person WHERE idcard = ?', [cid]);
+        
+        if (personRows.length > 0) {
+            const { pid, pcucodeperson } = personRows[0];
+            
+            // เช็คว่าเคยมีรูปในระบบหรือยัง
+            const [photoExist] = await connection.execute(
+                'SELECT pid FROM personphoto WHERE pid = ? AND pcucodeperson = ?', 
+                [pid, pcucodeperson]
+            );
+
+            if (photoExist.length > 0) {
+                // อัปเดตรูปเดิม
+                await connection.execute(
+                    'UPDATE personphoto SET photo = ? WHERE pid = ? AND pcucodeperson = ?',
+                    [imageBuffer, pid, pcucodeperson]
+                );
+            } else {
+                // เพิ่มรูปใหม่
+                await connection.execute(
+                    'INSERT INTO personphoto (pcucodeperson, pid, photo) VALUES (?, ?, ?)',
+                    [pcucodeperson, pid, imageBuffer]
+                );
+            }
+            console.log(`✅ อัปเดตฐานข้อมูลรูปภาพของ CID: ${cid} สำเร็จ!`);
+        }
+
+        await connection.end();
+        res.status(200).json({ success: true, message: 'บันทึกรูปภาพสำเร็จ' });
+
+    } catch (error) {
+        if (connection) await connection.end();
+        console.error('❌ Upload Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
