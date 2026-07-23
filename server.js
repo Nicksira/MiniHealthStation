@@ -149,9 +149,25 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
 });
 
 // ==========================================
-// 🎯 API 3: ดึงรูปภาพคนไข้จาก JHCIS (แก้เป็นตาราง personimage)
+// 🎯 API 3: ดึงรูปภาพคนไข้ (ดึงจากไฟล์รูป .jpg ก่อน ถ้าไม่มีค่อยหาใน JHCIS)
 // ==========================================
 app.get('/jhcis-api/photo/:cid', checkApiKey, async (req, res) => {
+    const cid = req.params.cid;
+    const filePath = path.join(__dirname, 'patient_photos', `${cid}.jpg`);
+
+    // 🟢 1. ระบบ Enterprise: ค้นหารูปจากโฟลเดอร์ไฟล์ .jpg ก่อน (ชัวร์ 100% โหลดไวปรื๊ด ไม่พึ่ง Database)
+    if (fs.existsSync(filePath)) {
+        try {
+            const imageBuffer = fs.readFileSync(filePath);
+            const base64Image = imageBuffer.toString('base64');
+            console.log(`📸 ดึงรูปของ ${cid} จากไฟล์ .jpg สำเร็จ!`);
+            return res.status(200).json({ success: true, image: base64Image });
+        } catch (err) {
+            console.error('อ่านไฟล์รูปภาพไม่สำเร็จ:', err);
+        }
+    }
+
+    // 🟡 2. ถ้าระบบ Kiosk ยังไม่เคยถ่ายรูปคนนี้ ให้ลองควานหาในฐานข้อมูล JHCIS เผื่อมีรูปเก่า
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
@@ -163,11 +179,12 @@ app.get('/jhcis-api/photo/:cid', checkApiKey, async (req, res) => {
                 AND person.pcucodeperson = personimage.pcucodeperson 
             WHERE person.idcard = ?
         `;
-        const [rows] = await connection.execute(sql, [req.params.cid]);
+        const [rows] = await connection.execute(sql, [cid]);
         await connection.end();
 
         if (rows.length > 0 && rows[0].photo) {
             const base64Image = Buffer.from(rows[0].photo).toString('base64');
+            console.log(`💾 ดึงรูปของ ${cid} จาก Database JHCIS สำเร็จ!`);
             res.status(200).json({ success: true, image: base64Image });
         } else {
             res.status(404).json({ success: false, message: 'ไม่พบรูปภาพในระบบ' });
