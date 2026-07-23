@@ -83,10 +83,13 @@ function App() {
       });
       
       if (response.ok) {
-        // 🛑 ถ้ารับค่าเป็นไฟล์รูปตรงๆ (Blob) ให้แปลงเป็น Object URL แล้วโชว์เลย
-        const blob = await response.blob();
-        const imageUrl = URL.createObjectURL(blob);
-        setPatientImage(imageUrl);
+        // 🛑 แก้ไข: รับข้อมูลเป็น JSON เพื่อดึงตัวแปร image ที่เป็น Base64 ออกมา
+        const data = await response.json();
+        if (data.success && data.image) {
+          setPatientImage(`data:image/jpeg;base64,${data.image}`);
+        } else {
+          setPatientImage(null);
+        }
       } else {
         setPatientImage(null); 
       }
