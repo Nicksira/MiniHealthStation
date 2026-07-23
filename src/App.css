@@ -5,6 +5,9 @@ body {
   font-family: 'Kanit', sans-serif;
   background-color: #f6f9fc;
   overflow-x: hidden;
+  /* 🛑 ปิดระบบดึงหน้าจอเพื่อรีเฟรช (Pull-to-refresh) */
+  overscroll-behavior-y: none;
+  overscroll-behavior: none;
 }
 
 /* พื้นหลังลายรังผึ้งหกเหลี่ยมจางๆ */
@@ -16,6 +19,9 @@ body {
   background-image: radial-gradient(#dbe5f0 2px, transparent 2px);
   background-size: 30px 30px;
   padding-bottom: 120px;
+  /* 🛑 ป้องกันไม่ให้แอปขยับเขยื้อนเมื่อดึงจอ */
+  overscroll-behavior: none;
+  touch-action: pan-y;
 }
 
 .header-bg {
@@ -444,7 +450,7 @@ body {
   font-size: 64px !important;    /* ปรับให้ใหญ่ขึ้นอีกเป็น 64px */
   font-weight: 900 !important;
   margin: 0;
-  letter-spacing: 3px;           
+  letter-spacing: 3px;          
   
   /* --- แก้ปัญหาข้อความตกขอบ --- */
   line-height: 1.3;              /* เพิ่มระยะบรรทัดไม่ให้สระบน/ล่างโดนตัด */
