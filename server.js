@@ -18,17 +18,18 @@ const API_KEY = 'ThapPhrik_Secret_Key_9988';
 app.use(cors({
     origin: '*', 
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'x-api-key'] // ลบ ngrok ออก เหลือแค่นี้พอครับ
+    allowedHeaders: ['Content-Type', 'x-api-key']
 }));
 
+// 🟢 2. ขยายหลอดลมรับไฟล์รูปขนาดใหญ่ 50MB
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // 🟢 3. ตั้งค่า Database JHCIS
 const dbConfig = {
-    host: '127.0.0.1',   // 👈 สำคัญมาก: ให้เปลี่ยนเป็น 127.0.0.1 (เพื่อบังคับให้ MySQL ยอมรับสิทธิ์ root)
+    host: '127.0.0.1',   
     user: 'root',      
-    password: '123456',  // 👈 ใส่รหัสผ่านเข้าฐานข้อมูล JHCIS ของคุณ (จากโค้ด Python ก่อนหน้า ผมเดาว่าอาจจะเป็น 123456 หรือรหัสที่คุณตั้งไว้ครับ)
+    password: '123456',  // เปลี่ยนให้ตรงกับรหัสผ่านจริงถ้าจำเป็น
     database: 'jhcisdb',
     port: 3333 
 };
@@ -44,13 +45,8 @@ const checkApiKey = (req, res, next) => {
 // 🎯 API 1: บันทึกเข้าคิว JHCIS (ตาราง Visit)
 // ==========================================
 app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
-    // ป้องกันกรณี req.body เป็นค่าว่าง
     const data = req.body || {}; 
-    
-    if (!data.cid) {
-        console.error('❌ ข้อมูลที่ส่งมาไม่มีเลขบัตรประชาชน (CID)');
-        return res.status(400).json({ success: false, message: 'ไม่มีข้อมูล CID กรุณาส่งข้อมูลให้ครบถ้วน' });
-    }
+    if (!data.cid) return res.status(400).json({ success: false, message: 'ไม่มีข้อมูล CID' });
 
     let connection;
     try {
@@ -68,16 +64,8 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
         }
         
         const p = personRows[0];
-
         const [maxRows] = await connection.execute('SELECT MAX(visitno) as mx FROM visit');
         const vno = (maxRows[0].mx || 0) + 1;
-
-        const weight = data.weight || 0;
-        const height = data.height || 0;
-        const pulse = data.pulse || 0;
-        const temp = data.temp || 0;
-        const waist = data.waist || 0;
-        const pressure = data.sysDia === '---' ? '' : data.sysDia;
 
         const sql = `
             INSERT INTO visit 
@@ -87,7 +75,7 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
         
         await connection.execute(sql, [
             p.pcucodeperson, vno, p.pcucodeperson, p.pid, 
-            weight, height, pressure, pulse, temp, waist, 
+            data.weight || 0, data.height || 0, data.sysDia === '---' ? '' : data.sysDia, data.pulse || 0, data.temp || 0, data.waist || 0, 
             p.rightcode, p.rightno
         ]);
 
@@ -98,23 +86,20 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
     } catch (error) {
         if (connection) await connection.end();
         console.error('❌ Database Error:', error);
-        res.status(500).json({ success: false, message: 'Database Error', error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
 // ==========================================
-// 🎯 API 2: ดึงประวัติคนไข้ JHCIS (ดึงชื่อโรคประจำตัวของจริง)
+// 🎯 API 2: ดึงประวัติคนไข้ JHCIS (ชื่อและโรคประจำตัว)
 // ==========================================
 app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        
-        // ใช้คำสั่ง JOIN เชื่อมตารางคนไข้ (person) -> ตารางประวัติโรค (personchronic) -> ตารางชื่อโรค (cdisease)
         const sql = `
             SELECT 
-                p.fname, 
-                p.lname,
+                p.fname, p.lname,
                 GROUP_CONCAT(c.diseasenamethai SEPARATOR ', ') as chronic_name
             FROM person p
             LEFT JOIN personchronic pc ON p.pid = pc.pid AND p.pcucodeperson = pc.pcucodeperson
@@ -123,7 +108,6 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
             GROUP BY p.pid, p.fname, p.lname
             LIMIT 1
         `;
-        
         const [rows] = await connection.execute(sql, [req.params.cid]);
         await connection.end();
 
@@ -132,9 +116,7 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
             res.status(200).json({ 
                 success: true, 
                 data: { 
-                    fname: patient.fname, 
-                    lname: patient.lname, 
-                    // ถ้าเจอชื่อโรคให้แสดงชื่อโรค (คั่นด้วยลูกน้ำถ้ามีหลายโรค) ถ้าไม่เจอให้ขึ้น 'ไม่มีโรคประจำตัว'
+                    fname: patient.fname, lname: patient.lname, 
                     chronic: patient.chronic_name ? patient.chronic_name : 'ไม่มีโรคประจำตัว' 
                 } 
             });
@@ -143,51 +125,60 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
         }
     } catch (error) {
         if (connection) await connection.end();
-        console.error('❌ ดึงประวัติคนไข้ล้มเหลว (SQL Error):', error.message);
         res.status(500).json({ success: false, message: error.message }); 
     }
 });
 
 // ==========================================
-// 🎯 API 3: ดึงรูปภาพคนไข้จาก JHCIS (ตาราง personimage) แบบตรงไปตรงมา
+// 🎯 API 3: ดึงรูปภาพ (ดึงจากไฟล์ .jpg ก่อน -> ถ้าไม่มีค่อยไปหาใน personimages)
 // ==========================================
 app.get('/jhcis-api/photo/:cid', checkApiKey, async (req, res) => {
     const cid = req.params.cid;
+
+    // 1. ลองดึงจากไฟล์ .jpg ในเครื่องก่อน (โหลดไวกว่า ไม่พึ่ง DB)
+    const filePath = path.join(__dirname, 'patient_photos', `${cid}.jpg`);
+    if (fs.existsSync(filePath)) {
+        try {
+            // 🛑 ท่าไม้ตาย: ส่งไฟล์ออกแบบ Stream เลย ไม่ต้องแปลง Base64 ให้เซิร์ฟเวอร์เหนื่อย
+            return res.sendFile(filePath);
+        } catch (err) {
+            console.error('อ่านไฟล์รูปภาพไม่สำเร็จ จะพยายามดึงจาก DB แทน...');
+        }
+    }
+
+    // 2. ถ้าไม่มีไฟล์ ให้ไปค้นในฐานข้อมูล (ตาราง personimages)
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
         
-        // คำสั่ง SQL ดึงรูปจากตาราง personimage ของ JHCIS
         const sql = `
-            SELECT personimage.personimage as photo
-            FROM person 
-            INNER JOIN personimage 
-                ON person.pid = personimage.pid 
-                AND person.pcucodeperson = personimage.pcucodeperson 
-            WHERE person.idcard = ?
+            SELECT img.photo as photo
+            FROM person p
+            INNER JOIN personimages img 
+                ON p.pid = img.pid 
+                AND p.pcucodeperson = img.pcucodeperson 
+            WHERE p.idcard = ?
         `;
-        
         const [rows] = await connection.execute(sql, [cid]);
         await connection.end();
 
         if (rows.length > 0 && rows[0].photo) {
-            // แปลงข้อมูล BLOB เป็น Base64 ส่งให้ React ทันที
-            const base64Image = Buffer.from(rows[0].photo).toString('base64');
-            console.log(`✅ ดึงรูปของ CID: ${cid} จาก JHCIS สำเร็จ!`);
-            return res.status(200).json({ success: true, image: base64Image });
+            // 🛑 ท่าไม้ตาย: ส่งข้อมูล BLOB ออกไปเป็นไฟล์รูปภาพ (image/jpeg) ตรงๆ แทนการยัดใส่ JSON
+            res.set('Content-Type', 'image/jpeg');
+            console.log(`✅ ดึงรูปของ CID: ${cid} จาก Database สำเร็จ!`);
+            return res.send(rows[0].photo);
         } else {
-            console.log(`❌ ไม่พบรูปภาพของ CID: ${cid} ในระบบ`);
             return res.status(404).json({ success: false, message: 'ไม่พบรูปภาพในระบบ' });
         }
     } catch (error) {
         if (connection) await connection.end();
-        console.error('❌ Database Photo Error:', error.message);
+        console.error('❌ Database Photo Fetch Error:', error.message);
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 // ==========================================
-// 🎯 API 4: อัปโหลดรูปจาก Kiosk ลง JHCIS (แก้เป็นตาราง personimage)
+// 🎯 API 4: อัปโหลดรูปภาพ (เซฟไฟล์ .jpg + อัปเดตลงตาราง personimages)
 // ==========================================
 app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
     const { cid, image } = req.body;
@@ -195,113 +186,51 @@ app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
 
     let connection;
     try {
-        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-        const imageBuffer = Buffer.from(base64Data, 'base64');
-
-        // Backup ไฟล์
-        const uploadDir = path.join(__dirname, 'patient_photos');
-        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-        fs.writeFileSync(path.join(uploadDir, `${cid}.jpg`), imageBuffer);
-
-        connection = await mysql.createConnection(dbConfig);
-        const [personRows] = await connection.execute('SELECT pid, pcucodeperson FROM person WHERE idcard = ?', [cid]);
-        
-        if (personRows.length > 0) {
-            const { pid, pcucodeperson } = personRows[0];
-            
-            // เช็คตาราง personimage
-            const [photoExist] = await connection.execute(
-                'SELECT pid FROM personimage WHERE pid = ? AND pcucodeperson = ?', 
-                [pid, pcucodeperson]
-            );
-
-            if (photoExist.length > 0) {
-                await connection.execute(
-                    'UPDATE personimage SET personimage = ? WHERE pid = ? AND pcucodeperson = ?',
-                    [imageBuffer, pid, pcucodeperson]
-                );
-            } else {
-                await connection.execute(
-                    'INSERT INTO personimage (pcucodeperson, pid, personimage) VALUES (?, ?, ?)',
-                    [pcucodeperson, pid, imageBuffer]
-                );
-            }
-        }
-        await connection.end();
-        res.status(200).json({ success: true, message: 'บันทึกรูปลง personimage สำเร็จ' });
-    } catch (error) {
-        if (connection) await connection.end();
-        console.error('❌ Upload Error:', error);
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
-
-// ==========================================
-// 🎯 API 4: อัปโหลดรูปจาก Kiosk ลง JHCIS และเซฟเป็นไฟล์เลข 13 หลัก
-// ==========================================
-app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
-    const { cid, image } = req.body;
-    
-    if (!cid || !image) {
-        return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบถ้วน (ต้องการ CID และ Image)' });
-    }
-
-    let connection;
-    try {
-        // 1. แปลงรูป Base64 กลับเป็นไฟล์ไบนารี (Buffer)
+        // 1. แปลงรูป Base64 กลับเป็น Buffer
         const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
         const imageBuffer = Buffer.from(base64Data, 'base64');
 
         // 2. ระบบ Backup: เซฟเป็นไฟล์ .jpg ตั้งชื่อตามเลข 13 หลัก
         const uploadDir = path.join(__dirname, 'patient_photos');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir); // สร้างโฟลเดอร์อัตโนมัติถ้ายังไม่มี
-        }
-        const filePath = path.join(uploadDir, `${cid}.jpg`);
-        fs.writeFileSync(filePath, imageBuffer);
-        console.log(`📸 เซฟไฟล์รูปภาพสำเร็จ: ${cid}.jpg`);
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+        fs.writeFileSync(path.join(uploadDir, `${cid}.jpg`), imageBuffer);
+        console.log(`📸 เซฟไฟล์รูปภาพลงเครื่องสำเร็จ: ${cid}.jpg`);
 
-        // 3. ระบบ Database: นำรูปอัปเดตลงตาราง personphoto ของ JHCIS
+        // 3. ระบบ Database: บันทึกลงตาราง personimages
         connection = await mysql.createConnection(dbConfig);
-        
-        // หา pid ก่อน
         const [personRows] = await connection.execute('SELECT pid, pcucodeperson FROM person WHERE idcard = ?', [cid]);
         
         if (personRows.length > 0) {
             const { pid, pcucodeperson } = personRows[0];
             
-            // เช็คว่าเคยมีรูปในระบบหรือยัง
+            // เช็คว่ามีรูปในตาราง personimages หรือยัง
             const [photoExist] = await connection.execute(
-                'SELECT pid FROM personphoto WHERE pid = ? AND pcucodeperson = ?', 
+                'SELECT pid FROM personimages WHERE pid = ? AND pcucodeperson = ?', 
                 [pid, pcucodeperson]
             );
 
             if (photoExist.length > 0) {
-                // อัปเดตรูปเดิม
+                // 🛑 แก้ตรงนี้: เปลี่ยนคำว่า image เป็น photo
                 await connection.execute(
-                    'UPDATE personphoto SET photo = ? WHERE pid = ? AND pcucodeperson = ?',
+                    'UPDATE personimages SET photo = ? WHERE pid = ? AND pcucodeperson = ?',
                     [imageBuffer, pid, pcucodeperson]
                 );
             } else {
-                // เพิ่มรูปใหม่
+                // 🛑 แก้ตรงนี้: เปลี่ยนคำว่า image เป็น photo
                 await connection.execute(
-                    'INSERT INTO personphoto (pcucodeperson, pid, photo) VALUES (?, ?, ?)',
+                    'INSERT INTO personimages (pcucodeperson, pid, photo) VALUES (?, ?, ?)',
                     [pcucodeperson, pid, imageBuffer]
                 );
             }
-            console.log(`✅ อัปเดตฐานข้อมูลรูปภาพของ CID: ${cid} สำเร็จ!`);
+            console.log(`✅ อัปเดตตาราง personimages ของ CID: ${cid} สำเร็จ!`);
         }
 
         await connection.end();
-        res.status(200).json({ success: true, message: 'บันทึกรูปภาพสำเร็จ' });
+        res.status(200).json({ success: true, message: 'บันทึกรูปภาพสำเร็จทั้ง 2 ระบบ' });
 
     } catch (error) {
         if (connection) await connection.end();
         console.error('❌ Upload Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 JHCIS API รอรับข้อมูลจาก Kiosk ที่พอร์ต ${PORT}`);
 });

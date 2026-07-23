@@ -72,23 +72,21 @@ function App() {
   const fetchPatientPhoto = async (cid: string) => {
     try {
       const timestamp = new Date().getTime();
-      // 🌟 เปลี่ยนจาก http://${config.host} เป็นโดเมน HTTPS หลักของระบบ
-      const response = await fetch(`${API_BASE_URL}/jhcis-api/photo/${cid}?t=${timestamp}`, {
+      // 🌟 เปลี่ยน URL ยิงไปที่ HTTPS หลัก
+      const photoUrl = `${API_BASE_URL}/jhcis-api/photo/${cid}?t=${timestamp}`;
+      
+      const response = await fetch(photoUrl, {
         method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
           'x-api-key': API_KEY
         }
       });
-      // ... (โค้ดด้านล่างเหมือนเดิม)
       
       if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.image) {
-          setPatientImage(`data:image/jpeg;base64,${data.image}`);
-        } else {
-          setPatientImage(null);
-        }
+        // 🛑 ถ้ารับค่าเป็นไฟล์รูปตรงๆ (Blob) ให้แปลงเป็น Object URL แล้วโชว์เลย
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        setPatientImage(imageUrl);
       } else {
         setPatientImage(null); 
       }
