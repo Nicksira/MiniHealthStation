@@ -62,15 +62,16 @@ function App() {
   // 1. เพิ่ม State สำหรับเก็บรูปภาพคนไข้ (Base64)
   const [patientImage, setPatientImage] = useState<string | null>(null);
 
-  // 2. สร้างฟังก์ชันดึงรูปจากฐานข้อมูล JHCIS (ดึงผ่าน API หลังบ้าน)
+  // 1. ฟังก์ชันดึงรูป ทะลวง Cache 100%
   const fetchPatientPhoto = async (cid: string) => {
     try {
-      // ⚠️ เปลี่ยน 192.168.x.x เป็น IP จริงของเครื่อง Windows Server
-      const response = await fetch(`http://26.62.30.1:3000/jhcis-api/photo/${cid}`, {
+      // 🛑 เพิ่ม ?t=เวลา เพื่อบังคับเบราว์เซอร์โหลดรูปใหม่จาก Database เสมอ
+      const timestamp = new Date().getTime();
+      const response = await fetch(`http://${config.host}:${config.port}/jhcis-api/photo/${cid}?t=${timestamp}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': 'ThapPhrik_Secret_Key_9988' // 👈 ส่งกุญแจลับไปปลดล็อก API
+          'x-api-key': 'ThapPhrik_Secret_Key_9988'
         }
       });
       
@@ -90,47 +91,22 @@ function App() {
     }
   };
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (vitals.sysDia && vitals.sysDia.includes('/')) {
-      const parts = vitals.sysDia.split('/');
-      if (parts.length === 2) {
-        const sys = Number(parts[0]);
-        const dia = Number(parts[1]);
-        if (sys >= 190 || dia >= 100) setShowEmergencyModal(true);
-        else setShowEmergencyModal(false);
-      }
-    }
-  }, [vitals.sysDia]);
-
-  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-
-  // ฟังก์ชันถ่ายรูปและอัปโหลด
+  // 2. ฟังก์ชันถ่ายรูป (ดึงข้อมูล IP จากตั้งค่า และใช้ CID ของจริง)
   const handleCapturePhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // เรากำลังอ่านไฟล์ภาพที่ถ่ายจาก Tablet
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result as string;
+      setPatientImage(base64String); // โชว์รูปหน้าจอทันที
       
-      // 1. อัปเดตโชว์ที่หน้าจอทันทีให้คนไข้เห็น
-      setPatientImage(base64String);
-      
-      // 2. ดึงเลข 13 หลักจาก State ปัจจุบัน (สมมติว่าคุณสิรภพเก็บไว้ในตัวแปร currentCid หรือดึงจากข้อมูลคนไข้)
-      // 🛑 แก้บรรทัดนี้ ให้ดึงเลข 13 หลักจากตัวแปร patient จริงๆ
-      const currentCid = patient?.cid; 
-
+      const currentCid = patient?.cid; // 🛑 ดึงเลข 13 หลักจาก State ปัจจุบันจริงๆ
       if (!currentCid) return;
 
       try {
         setIsUploadingPhoto(true);
-        // 🛑 แก้บรรทัดนี้ ให้ยิง API ไปที่ IP ที่ตั้งค่าไว้ (หรือ 26.62.30.1 ที่ใช้อยู่)
+        // 🛑 ยิงไปที่ IP ตามหน้าตั้งค่า
         const response = await fetch(`http://${config.host}:${config.port}/jhcis-api/upload-photo`, {
           method: 'POST',
           headers: {
@@ -145,8 +121,7 @@ function App() {
 
         const data = await response.json();
         if (data.success) {
-          // ถ่ายเสร็จ บันทึกเสร็จเรียบร้อย!
-          console.log('อัปโหลดรูปสำเร็จระดับ Enterprise!');
+          console.log('อัปโหลดรูปลง DB JHCIS สำเร็จ!');
         }
       } catch (error) {
         console.error("อัปโหลดรูปไม่สำเร็จ:", error);
@@ -155,7 +130,6 @@ function App() {
       }
     };
     
-    // บีบอัดและแปลงรูปเป็น Base64
     reader.readAsDataURL(file);
   };
 
@@ -265,6 +239,10 @@ function App() {
     setIsLoggedIn(false);
     setPatient(null);
     setPatientPhoto(null);
+    
+    // 🛑 เพิ่มบรรทัดนี้! เพื่อเคลียร์รูปภาพที่ดึงจาก JHCIS/กล้องถ่ายรูป ไม่ให้ค้างไปถึงคนไข้คิวถัดไป
+    setPatientImage(null); 
+    
     setIsTestingMode(false);
     setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---' });
   };

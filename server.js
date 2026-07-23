@@ -149,29 +149,24 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
 });
 
 // ==========================================
-// 🎯 API 3: ดึงรูปภาพคนไข้จาก JHCIS (personphoto)
+// 🎯 API 3: ดึงรูปภาพคนไข้จาก JHCIS (แก้เป็นตาราง personimage)
 // ==========================================
 app.get('/jhcis-api/photo/:cid', checkApiKey, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        
-        // คำสั่ง SQL ทะลวงหารูปจากตาราง personphoto
         const sql = `
-            SELECT personphoto.photo 
+            SELECT personimage.personimage as photo
             FROM person 
-            INNER JOIN personphoto 
-                ON person.pid = personphoto.pid 
-                AND person.pcucodeperson = personphoto.pcucodeperson 
+            INNER JOIN personimage 
+                ON person.pid = personimage.pid 
+                AND person.pcucodeperson = personimage.pcucodeperson 
             WHERE person.idcard = ?
         `;
-        
         const [rows] = await connection.execute(sql, [req.params.cid]);
         await connection.end();
 
-        // ตรวจสอบว่าพบรูปภาพหรือไม่ (ต้องแน่ใจว่า field photo ไม่เป็น null)
         if (rows.length > 0 && rows[0].photo) {
-            // แปลงข้อมูล BLOB (Buffer) ให้เป็นสตริง Base64 เพื่อส่งเข้าหน้าเว็บ
             const base64Image = Buffer.from(rows[0].photo).toString('base64');
             res.status(200).json({ success: true, image: base64Image });
         } else {
@@ -179,7 +174,56 @@ app.get('/jhcis-api/photo/:cid', checkApiKey, async (req, res) => {
         }
     } catch (error) {
         if (connection) await connection.end();
-        console.error('❌ ดึงรูปคนไข้ล้มเหลว (SQL Error):', error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ==========================================
+// 🎯 API 4: อัปโหลดรูปจาก Kiosk ลง JHCIS (แก้เป็นตาราง personimage)
+// ==========================================
+app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
+    const { cid, image } = req.body;
+    if (!cid || !image) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบถ้วน' });
+
+    let connection;
+    try {
+        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+
+        // Backup ไฟล์
+        const uploadDir = path.join(__dirname, 'patient_photos');
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+        fs.writeFileSync(path.join(uploadDir, `${cid}.jpg`), imageBuffer);
+
+        connection = await mysql.createConnection(dbConfig);
+        const [personRows] = await connection.execute('SELECT pid, pcucodeperson FROM person WHERE idcard = ?', [cid]);
+        
+        if (personRows.length > 0) {
+            const { pid, pcucodeperson } = personRows[0];
+            
+            // เช็คตาราง personimage
+            const [photoExist] = await connection.execute(
+                'SELECT pid FROM personimage WHERE pid = ? AND pcucodeperson = ?', 
+                [pid, pcucodeperson]
+            );
+
+            if (photoExist.length > 0) {
+                await connection.execute(
+                    'UPDATE personimage SET personimage = ? WHERE pid = ? AND pcucodeperson = ?',
+                    [imageBuffer, pid, pcucodeperson]
+                );
+            } else {
+                await connection.execute(
+                    'INSERT INTO personimage (pcucodeperson, pid, personimage) VALUES (?, ?, ?)',
+                    [pcucodeperson, pid, imageBuffer]
+                );
+            }
+        }
+        await connection.end();
+        res.status(200).json({ success: true, message: 'บันทึกรูปลง personimage สำเร็จ' });
+    } catch (error) {
+        if (connection) await connection.end();
+        console.error('❌ Upload Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
