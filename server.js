@@ -230,38 +230,50 @@ app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 });
-
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-// 🛑 นำ API Key ที่สมัครฟรีจาก Google AI Studio มาใส่ตรงนี้
-const genAI = new GoogleGenerativeAI('');
-
 // ==========================================
-// 🎯 API 5: ระบบ AI พยาบาลอัจฉริยะ (Gemini)
+// 🎯 API 5: ระบบ AI พยาบาลอัจฉริยะ (ใช้โมเดลตามโควตาจริงในระบบ)
 // ==========================================
+const GEMINI_API_KEY = 'AIzaSyDvSnOr12Z9J2wd8wpPjtv5qOQ3laHpGaY'; 
+
 app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
     const { vitals } = req.body;
     
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-3.6-pro" });
-        // เขียน Prompt บังคับให้ AI พูดเหมือนพยาบาล
         const prompt = `
-        คุณคือ "พยาบาลเอไอ ประจำ รพ.สต.ทับพริก" หน้าที่ของคุณคืออ่านค่าสุขภาพแล้วให้คำแนะนำแบบสั้นๆ เข้าใจง่าย กระชับ ไม่เกิน 3 ประโยค เป็นกันเองและห่วงใย
+        คุณคือ "พยาบาลเอไอ ประจำ รพ.สต.ทับพริก" หน้าที่ของคุณคืออ่านค่าสุขภาพแล้วให้คำแนะนำแบบสั้นๆ เข้าใจง่าย กระชับ ไม่เกิน 2-3 ประโยค โดยให้เรียกว่าคนไข้
         ข้อมูลคนไข้ที่วัดได้ตอนนี้: 
         - ความดันโลหิต: ${vitals.sysDia} mmHg
         - น้ำตาลในเลือด: ${vitals.sugar} mg/dL
         - น้ำหนัก: ${vitals.weight} kg
-        วิเคราะห์และให้คำแนะนำเลย (ห้ามใช้คำศัพท์แพทย์ที่ยากเกินไป):`;
+        วิเคราะห์และให้คำแนะนำเลย (ห้ามใช้คำศัพท์แพทย์ที่ยากเกินไป และไม่ต้องมีอักขระพิเศษ):`;
 
-        const result = await model.generateContent(prompt);
-        let aiText = result.response.text();
-        // ลบอักขระพิเศษออก เพื่อให้ระบบอ่านออกเสียง (TTS) ทำงานได้เนียนๆ
-        aiText = aiText.replace(/[*#]/g, ''); 
-        
-        res.status(200).json({ success: true, message: aiText });
+        // 🌟 ใช้ชื่อโมเดลที่มีโควตาจริงในตารางของคุณ (gemini-2.5-flash หรือ gemini-3.5-flash)
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{ text: prompt }]
+                }]
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.candidates && data.candidates.length > 0) {
+            let aiText = data.candidates[0].content.parts[0].text;
+            aiText = aiText.replace(/[*#]/g, ''); // ลบอักขระพิเศษออก
+            
+            console.log("✅ AI วิเคราะห์สำเร็จ:", aiText);
+            return res.status(200).json({ success: true, message: aiText });
+        } else {
+            console.error("❌ Google Response Error:", JSON.stringify(data));
+            throw new Error("Invalid response format from Google");
+        }
+
     } catch (error) {
-        console.error("AI Error:", error);
-        res.status(200).json({ success: true, message: "ค่าความดันของคุณถูกบันทึกแล้วค่ะ หากรู้สึกปวดศีรษะให้แจ้งเจ้าหน้าที่ทันทีนะคะ" }); // Fallback ถ้าเน็ตหลุด
+        console.error("❌ AI Error Detail:", error.message);
+        return res.status(200).json({ success: true, message: "ค่าความดันของคุณถูกบันทึกแล้วค่ะ หากรู้สึกปวดศีรษะให้แจ้งเจ้าหน้าที่ทันทีนะคะ" });
     }
 });
 

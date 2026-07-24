@@ -977,11 +977,12 @@ function App() {
               {(vitals.sysDia !== '---' || vitals.weight !== '---' || vitals.sugar !== '---') && (
                 <div className="assessment-item" style={{ display: 'flex', alignItems: 'flex-start', gap: '15px', padding: '15px', background: '#f8fafc', borderRadius: '10px' }}>
                   
-                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {/* วงกลมรองหลังปรับเป็นโทนฟ้าอ่อน เพื่อให้ไอคอนสีหมอโดดเด่นสวยงาม */}
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {aiLoading ? (
-                      <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '18px', color: 'white' }}></i>
+                      <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '18px', color: 'rgb(116, 192, 252)' }}></i>
                     ) : (
-                      <i className="fa-solid fa-robot" style={{ fontSize: '18px', color: 'white' }}></i>
+                      <i className="fa-solid fa-user-doctor" style={{ color: 'rgb(116, 192, 252)', fontSize: '20px' }}></i>
                     )}
                   </div>
                   
