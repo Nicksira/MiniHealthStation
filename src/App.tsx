@@ -1059,63 +1059,8 @@ function App() {
         </div>
       </div>
 
-      <button 
-    onClick={async () => {
-      setShowAiModal(true);
-      setAiLoading(true);
-      speak('กำลังส่งข้อมูลให้เอไอประเมิน กรุณารอสักครู่นะคะ');
-      try {
-        // ยิง API ไปให้ Node.js ประมวลผล
-        const res = await axios.post(`${API_BASE_URL}/jhcis-api/ai-analyze`, { vitals }, { headers: { 'x-api-key': API_KEY } });
-        setAiResponse(res.data.message);
-        speak(res.data.message); // ให้ AI อ่านผลลัพธ์ให้ฟัง!
-      } catch (e) {
-        setAiResponse("การเชื่อมต่อ AI ขัดข้อง กรุณาปรึกษาเจ้าหน้าที่ค่ะ");
-      }
-      setAiLoading(false);
-    }}
-    style={{ width: '100%', padding: '18px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '10px', fontSize: '20px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '10px' }}
-  >
-    
-  </button>
 
       {/* ======================= โซนหน้าต่าง Modal ทั้งหมด ======================= */}
-
-      {/* 🟢 Modal แจ้งผลวิเคราะห์ AI */}
-      {showAiModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99999, backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'white', borderRadius: '25px', padding: '40px 30px', width: '90%', maxWidth: '500px', textAlign: 'center', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', borderTop: '8px solid #8b5cf6' }}>
-            
-            <div style={{ width: '80px', height: '80px', borderRadius: '50%', margin: '0 auto 20px auto', backgroundColor: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <i className="fa-solid fa-robot" style={{ fontSize: '40px', color: '#8b5cf6' }}></i>
-            </div>
-            
-            <h2 style={{ margin: '0 0 15px 0', color: '#1F2937', fontSize: '24px' }}>AI พยาบาลประเมินผล</h2>
-            
-            {aiLoading ? (
-               <div style={{ padding: '20px' }}>
-                 <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '30px', color: '#8b5cf6', marginBottom: '15px' }}></i>
-                 <p style={{ color: '#6B7280', fontSize: '18px' }}>กำลังวิเคราะห์ข้อมูลสุขภาพของคุณ...</p>
-               </div>
-            ) : (
-               <p style={{ margin: '0 0 25px 0', color: '#374151', fontSize: '18px', lineHeight: '1.6', textAlign: 'left', background: '#F3F4F6', padding: '15px', borderRadius: '12px' }}>
-                 {aiResponse}
-               </p>
-            )}
-
-            <button 
-              onClick={() => {
-                setShowAiModal(false);
-                window.speechSynthesis.cancel(); // ปิดเสียง AI ถ้ากดยกเลิก
-              }} 
-              style={{ width: '100%', padding: '15px', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(139, 92, 246, 0.3)' }}
-            >
-              รับทราบ
-            </button>
-            
-          </div>
-        </div>
-      )}
 
       {/* 🟢 Modal ใหม่: กรอกเลขบัตรประชาชนด้วยมือ */}
       {showManualIdModal && (
