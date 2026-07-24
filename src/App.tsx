@@ -19,32 +19,6 @@ function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiResponse, setAiResponse] = useState('');
-  // 🧠 ให้ AI ทำงานอัตโนมัติ เมื่อมีการวัดค่าความดัน น้ำหนัก หรือน้ำตาลเสร็จสิ้น
-  useEffect(() => {
-    // จะให้ AI ทำงาน ก็ต่อเมื่อมีค่าใดค่าหนึ่งที่ไม่ใช่ '---' (คือเริ่มวัดแล้ว)
-    if (vitals.sysDia !== '---' || vitals.weight !== '---' || vitals.sugar !== '---') {
-      const fetchAI = async () => {
-        setAiLoading(true);
-        try {
-          const res = await axios.post(`${API_BASE_URL}/jhcis-api/ai-analyze`, { vitals }, { headers: { 'x-api-key': API_KEY } });
-          setAiResponse(res.data.message);
-          
-          // ให้ AI พูดสรุปให้ฟังด้วย (ถ้าไม่อยากให้พูดออโต้ ลบบรรทัด speak นี้ออกได้ครับ)
-          speak(res.data.message); 
-        } catch (e) {
-          setAiResponse("ไม่สามารถเชื่อมต่อระบบ AI ได้ในขณะนี้");
-        }
-        setAiLoading(false);
-      };
-      
-      // หน่วงเวลา 2 วินาทีหลังจากวัดค่าเสร็จ เพื่อให้คนไข้กรอกข้อมูลนิ่งก่อน แล้วค่อยยิง AI
-      const timeoutId = setTimeout(() => {
-        fetchAI();
-      }, 2000); 
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [vitals.sysDia, vitals.weight, vitals.sugar]); // จับตาดู 3 ค่านี้ ถ้าเปลี่ยนให้ยิง AI
   
 
   // 🟢 State สำหรับหน้าต่าง Modal ต่างๆ
@@ -98,6 +72,32 @@ function App() {
     bmi: '---', temp: '---', spo2: '---',
     sysDia: '---', pulse: '---', sugar: '---'
   });
+  // 🧠 ให้ AI ทำงานอัตโนมัติ เมื่อมีการวัดค่าความดัน น้ำหนัก หรือน้ำตาลเสร็จสิ้น
+  useEffect(() => {
+    // จะให้ AI ทำงาน ก็ต่อเมื่อมีค่าใดค่าหนึ่งที่ไม่ใช่ '---' (คือเริ่มวัดแล้ว)
+    if (vitals.sysDia !== '---' || vitals.weight !== '---' || vitals.sugar !== '---') {
+      const fetchAI = async () => {
+        setAiLoading(true);
+        try {
+          const res = await axios.post(`${API_BASE_URL}/jhcis-api/ai-analyze`, { vitals }, { headers: { 'x-api-key': API_KEY } });
+          setAiResponse(res.data.message);
+          
+          // ให้ AI พูดสรุปให้ฟังด้วย (ถ้าไม่อยากให้พูดออโต้ ลบบรรทัด speak นี้ออกได้ครับ)
+          speak(res.data.message); 
+        } catch (e) {
+          setAiResponse("ไม่สามารถเชื่อมต่อระบบ AI ได้ในขณะนี้");
+        }
+        setAiLoading(false);
+      };
+      
+      // หน่วงเวลา 2 วินาทีหลังจากวัดค่าเสร็จ เพื่อให้คนไข้กรอกข้อมูลนิ่งก่อน แล้วค่อยยิง AI
+      const timeoutId = setTimeout(() => {
+        fetchAI();
+      }, 2000); 
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [vitals.sysDia, vitals.weight, vitals.sugar]); // จับตาดู 3 ค่านี้ ถ้าเปลี่ยนให้ยิง AI
 
   // 1. เพิ่ม State สำหรับเก็บรูปภาพคนไข้ (Base64)
   const [patientImage, setPatientImage] = useState<string | null>(null);
