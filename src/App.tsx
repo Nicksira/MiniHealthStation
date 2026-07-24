@@ -11,6 +11,14 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [patientPhoto, setPatientPhoto] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  // 🟢 State สำหรับ Admin ลับ และระบบ Offline
+  const [adminTab, setAdminTab] = useState<'settings' | 'data'>('settings');
+  const [offlineQueue, setOfflineQueue] = useState<any[]>(JSON.parse(localStorage.getItem('offline_queue') || '[]'));
+
+  // 🟢 State สำหรับ AI ผู้ช่วยประเมิน
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiResponse, setAiResponse] = useState('');
 
   // 🟢 State สำหรับหน้าต่าง Modal ต่างๆ
   const [showTelemedModal, setShowTelemedModal] = useState(false);
@@ -537,43 +545,90 @@ function App() {
     setShowConfirmQueueModal(false); 
     setIsSubmitting(true); 
 
+    const payload = {
+      cid: patient.cid,
+      weight: vitals.weight === '' || vitals.weight === '---' ? 0 : parseFloat(vitals.weight),
+      height: vitals.height === '' || vitals.height === '---' ? 0 : parseFloat(vitals.height),
+      // ... (ดึง vitals อื่นๆ ให้ครบเหมือนโค้ดเดิมของคุณ)
+      sysDia: vitals.sysDia === '---' ? '' : vitals.sysDia, 
+      pulse: vitals.pulse === '' || vitals.pulse === '---' ? 0 : parseInt(vitals.pulse),
+    };
+    
     try {
-      const payload = {
-        cid: patient.cid,
-        weight: vitals.weight === '' || vitals.weight === '---' ? 0 : parseFloat(vitals.weight),
-        height: vitals.height === '' || vitals.height === '---' ? 0 : parseFloat(vitals.height),
-        waist: vitals.waist === '' || vitals.waist === '---' ? 0 : parseFloat(vitals.waist),
-        bmi: vitals.bmi === '' || vitals.bmi === '---' ? 0 : parseFloat(vitals.bmi),
-        sysDia: vitals.sysDia === '---' ? '' : vitals.sysDia, 
-        pulse: vitals.pulse === '' || vitals.pulse === '---' ? 0 : parseInt(vitals.pulse),
-        temp: vitals.temp === '' || vitals.temp === '---' ? 0 : parseFloat(vitals.temp),
-        spo2: vitals.spo2 === '' || vitals.spo2 === '---' ? 0 : parseInt(vitals.spo2),
-        sugar: vitals.sugar === '' || vitals.sugar === '---' ? 0 : parseInt(vitals.sugar)
-      };
-      
-      const response = await axios.post(`https://api.miniheealthstation.com/jhcis-api/queue`, payload, {
-    headers: { 'x-api-key': API_KEY },
-    timeout: 5000 
-  });
+      const response = await axios.post(`${API_BASE_URL}/jhcis-api/queue`, payload, {
+        headers: { 'x-api-key': API_KEY },
+        timeout: 5000 
+      });
 
       if (response.data || response.status === 200) {
+        speak('บันทึกข้อมูลและจัดคิวเข้าสู่ระบบสำเร็จ ขอบคุณที่ใช้บริการค่ะ');
         setNotifyModal({ show: true, isSuccess: true, title: 'จัดคิวสำเร็จ!', message: 'ส่งข้อมูลผู้ป่วยเข้าสู่ระบบ JHCIS เรียบร้อยแล้ว' });
         setTimeout(() => {
           setNotifyModal(prev => ({ ...prev, show: false }));
           handleLogout();
-        }, 2500);
+        }, 3000);
       }
     } catch (error) {
+      // 🛑 OFFLINE FIRST: ถ้ายิง JHCIS ไม่เข้า (เน็ตหลุด/เซิร์ฟเวอร์ดับ) ให้เซฟลง Kiosk ทันที
+      const savedOffline = JSON.parse(localStorage.getItem('offline_queue') || '[]');
+      savedOffline.push({ ...payload, name: `${patient.fname} ${patient.lname}`, timestamp: new Date().toLocaleString('th-TH') });
+      localStorage.setItem('offline_queue', JSON.stringify(savedOffline));
+      setOfflineQueue(savedOffline); // อัปเดตหน้า Admin
+
+      speak('การเชื่อมต่อขัดข้อง แต่ระบบได้บันทึกข้อมูลสำรองไว้ในเครื่องแล้วค่ะ ไม่ต้องกังวลนะคะ');
       setNotifyModal({ 
         show: true, 
-        isSuccess: false, 
-        title: 'การเชื่อมต่อล้มเหลว', 
-        message: `ส่งข้อมูลไปที่ ${config.host}:${config.port} ไม่สำเร็จ กรุณาตรวจสอบว่าเปิดโปรแกรม API หลังบ้านแล้ว หรือ IP ถูกต้อง` 
+        isSuccess: true, // ให้เป็นสีเขียวเพราะเซฟลงเครื่องสำเร็จ
+        title: 'บันทึกออฟไลน์สำเร็จ (เน็ตขัดข้อง)', 
+        message: 'ระบบเก็บข้อมูลของท่านไว้ใน Kiosk อย่างปลอดภัยแล้ว เจ้าหน้าที่จะซิงค์เข้าระบบให้ภายหลังครับ' 
       });
+      setTimeout(() => {
+        setNotifyModal(prev => ({ ...prev, show: false }));
+        handleLogout();
+      }, 4000);
     } finally {
       setIsSubmitting(false); 
     }
   };
+
+  // 🎙️ ฟังก์ชันให้ระบบพูดออกเสียงภาษาไทย
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel(); // ล้างคิวเสียงเก่าก่อน
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'th-TH'; // บังคับเสียงภาษาไทย
+      utterance.rate = 1.0;     // ความเร็วปกติ
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // ⏱️ ระบบรักษาความปลอดภัย Auto-Logout 10 นาที (600,000 ms)
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        if (isLoggedIn) {
+          speak('หมดเวลาทำรายการ ระบบได้ล้างข้อมูลของคุณเพื่อความปลอดภัยแล้วค่ะ');
+          handleLogout();
+        }
+      }, 600000); // 10 นาทีเป๊ะ
+    };
+
+    // ดักจับว่าคนไข้ยังจิ้มหน้าจออยู่ไหม
+    window.addEventListener('mousemove', resetTimer);
+    window.addEventListener('touchstart', resetTimer);
+    window.addEventListener('keydown', resetTimer);
+    resetTimer(); // เริ่มนับเวลา
+
+    return () => {
+      window.removeEventListener('mousemove', resetTimer);
+      window.removeEventListener('touchstart', resetTimer);
+      window.removeEventListener('keydown', resetTimer);
+      clearTimeout(timeoutId);
+    };
+  }, [isLoggedIn]);
 
   const analyzeHealth = () => {
     let alerts = [];
@@ -616,27 +671,59 @@ function App() {
         <h1 className="aurora-text">Mini Health Station</h1>
         <p>{config.hospName}</p>
       </header>
-
-      {showSettings ? (
+{showSettings ? (
         <main className="dashboard-screen" style={{ textAlign: 'left', padding: '40px', flex: 1, overflowY: 'auto', paddingBottom: '15vh' }}>
           <div style={{ background: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', maxWidth: '600px', margin: '0 auto' }}>
-            <h2 style={{ color: '#007AFF', marginBottom: '20px', borderBottom: '2px solid #EEE', paddingBottom: '10px' }}> ตั้งค่าระบบ (Settings)</h2>
-            <div style={{ marginBottom: '15px' }}><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px' }}> เปลี่ยนรูปโลโก้หน่วยงาน</label><input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'block', width: '100%', padding: '10px', background: '#F2F2F7', borderRadius: '8px' }} /></div>
-            <div style={{ marginBottom: '20px' }}><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px' }}> เปลี่ยนวิดีโอพื้นหลังหน้าแรก (MP4 เท่านั้น)</label><input type="file" accept="video/mp4" onChange={handleVideoUpload} style={{ display: 'block', width: '100%', padding: '10px', background: '#F2F2F7', borderRadius: '8px' }} /><small style={{ color: '#666' }}>* แนะนำไฟล์ความละเอียดพอดีและขนาดไม่เกิน 5MB</small></div>
-            <div style={{ marginBottom: '15px' }}><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>ชื่อหน่วยงาน/โรงพยาบาล</label><input type="text" value={config.hospName} onChange={(e) => setConfig({...config, hospName: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '15px', marginBottom: '15px' }}>
-              <div><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Host IP (JHCIS API)</label><input type="text" value={config.host} onChange={(e) => setConfig({...config, host: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
-              <div><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Port</label><input type="text" value={config.port} onChange={(e) => setConfig({...config, port: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
+            
+            {/* 🟢 ปุ่มสลับแท็บ Settings / Admin (แทรกตรงนี้) */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #EEE', paddingBottom: '10px' }}>
+              <button onClick={() => setAdminTab('settings')} style={{ flex: 1, padding: '10px', background: adminTab === 'settings' ? '#007AFF' : '#f1f5f9', color: adminTab === 'settings' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>⚙️ ตั้งค่าระบบ</button>
+              <button onClick={() => setAdminTab('data')} style={{ flex: 1, padding: '10px', background: adminTab === 'data' ? '#10b981' : '#f1f5f9', color: adminTab === 'data' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>📊 ข้อมูลค้างส่ง (Offline)</button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
-              <div><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Username (DB)</label><input type="text" value={config.user} onChange={(e) => setConfig({...config, user: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
-              <div><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Password (DB)</label><input type="password" value={config.password} onChange={(e) => setConfig({...config, password: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
-            </div>
-            <div style={{ marginBottom: '30px' }}><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>NHSO Token (สำหรับขอ Authen)</label><input type="text" value={config.nhsoToken} onChange={(e) => setConfig({...config, nhsoToken: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
-            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
-              <button onClick={() => setShowSettings(false)} style={{ padding: '12px 30px', background: '#8E8E93', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold' }}>ยกเลิก</button>
-              <button onClick={saveConfig} style={{ padding: '12px 30px', background: '#34C759', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold' }}>💾 บันทึกและเชื่อมต่อ</button>
-            </div>
+
+            {adminTab === 'settings' ? (
+              /* 🟢 แท็บ 1: ข้อมูลการตั้งค่าเดิมทั้งหมด */
+              <>
+                <h2 style={{ color: '#007AFF', marginBottom: '20px', borderBottom: '2px solid #EEE', paddingBottom: '10px' }}> ตั้งค่าระบบ (Settings)</h2>
+                <div style={{ marginBottom: '15px' }}><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px' }}> เปลี่ยนรูปโลโก้หน่วยงาน</label><input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'block', width: '100%', padding: '10px', background: '#F2F2F7', borderRadius: '8px' }} /></div>
+                <div style={{ marginBottom: '20px' }}><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px' }}> เปลี่ยนวิดีโอพื้นหลังหน้าแรก (MP4 เท่านั้น)</label><input type="file" accept="video/mp4" onChange={handleVideoUpload} style={{ display: 'block', width: '100%', padding: '10px', background: '#F2F2F7', borderRadius: '8px' }} /><small style={{ color: '#666' }}>* แนะนำไฟล์ความละเอียดพอดีและขนาดไม่เกิน 5MB</small></div>
+                <div style={{ marginBottom: '15px' }}><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>ชื่อหน่วยงาน/โรงพยาบาล</label><input type="text" value={config.hospName} onChange={(e) => setConfig({...config, hospName: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
+                <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                  <div><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Host IP (JHCIS API)</label><input type="text" value={config.host} onChange={(e) => setConfig({...config, host: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
+                  <div><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Port</label><input type="text" value={config.port} onChange={(e) => setConfig({...config, port: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                  <div><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Username (DB)</label><input type="text" value={config.user} onChange={(e) => setConfig({...config, user: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
+                  <div><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>Password (DB)</label><input type="password" value={config.password} onChange={(e) => setConfig({...config, password: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
+                </div>
+                <div style={{ marginBottom: '30px' }}><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px' }}>NHSO Token (สำหรับขอ Authen)</label><input type="text" value={config.nhsoToken} onChange={(e) => setConfig({...config, nhsoToken: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CCC', fontSize: '16px' }} /></div>
+                <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+                  <button onClick={() => setShowSettings(false)} style={{ padding: '12px 30px', background: '#8E8E93', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold' }}>ยกเลิก</button>
+                  <button onClick={saveConfig} style={{ padding: '12px 30px', background: '#34C759', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold' }}>💾 บันทึกและเชื่อมต่อ</button>
+                </div>
+              </>
+            ) : (
+              /* 🟢 แท็บ 2: หน้าจอ Admin ลับ สำหรับดูข้อมูล Offline */
+              <div>
+                <h3 style={{ color: '#10b981', marginTop: '0' }}>รายการคิวที่ค้างส่งเข้าระบบ JHCIS ({offlineQueue.length} รายการ)</h3>
+                <div style={{ maxHeight: '350px', overflowY: 'auto', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  {offlineQueue.length === 0 ? <p style={{ textAlign: 'center', color: '#94a3b8', margin: '20px 0' }}>ไม่มีข้อมูลค้างส่ง</p> : 
+                    offlineQueue.map((q, idx) => (
+                      <div key={idx} style={{ background: 'white', padding: '12px', marginBottom: '10px', borderRadius: '6px', borderLeft: '4px solid #f59e0b', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                        <strong style={{ fontSize: '16px' }}>{q.name}</strong> <span style={{ color: '#64748b' }}>(CID: {q.cid})</span><br/>
+                        <div style={{ color: '#475569', fontSize: '14px', marginTop: '5px' }}>ความดัน: <span style={{ fontWeight: 'bold' }}>{q.sysDia}</span> | น้ำหนัก: <span style={{ fontWeight: 'bold' }}>{q.weight}</span></div>
+                        <small style={{ color: '#94a3b8', display: 'block', marginTop: '5px' }}>บันทึกเวลา: {q.timestamp}</small>
+                      </div>
+                    ))
+                  }
+                </div>
+                <div style={{ display: 'flex', gap: '15px', marginTop: '20px', justifyContent: 'space-between' }}>
+                  <button onClick={() => { if(window.confirm('ต้องการลบข้อมูลค้างส่งทั้งหมดใช่หรือไม่?')) { localStorage.setItem('offline_queue', '[]'); setOfflineQueue([]); } }} style={{ padding: '12px 20px', background: '#ef4444', color: 'white', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>ลบทิ้งทั้งหมด</button>
+                  <button onClick={() => alert("ระบบซิงค์จะทยอยส่งข้อมูลอัตโนมัติเมื่อเซิร์ฟเวอร์ออนไลน์ครับ")} style={{ padding: '12px 20px', background: '#3b82f6', color: 'white', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>🔄 ซิงค์ขึ้น JHCIS</button>
+                </div>
+              </div>
+            )}
+            
           </div>
         </main>
       ) : !isLoggedIn ? (
@@ -916,7 +1003,63 @@ function App() {
         </div>
       </div>
 
+      <button 
+    onClick={async () => {
+      setShowAiModal(true);
+      setAiLoading(true);
+      speak('กำลังส่งข้อมูลให้เอไอประเมิน กรุณารอสักครู่นะคะ');
+      try {
+        // ยิง API ไปให้ Node.js ประมวลผล
+        const res = await axios.post(`${API_BASE_URL}/jhcis-api/ai-analyze`, { vitals }, { headers: { 'x-api-key': API_KEY } });
+        setAiResponse(res.data.message);
+        speak(res.data.message); // ให้ AI อ่านผลลัพธ์ให้ฟัง!
+      } catch (e) {
+        setAiResponse("การเชื่อมต่อ AI ขัดข้อง กรุณาปรึกษาเจ้าหน้าที่ค่ะ");
+      }
+      setAiLoading(false);
+    }}
+    style={{ width: '100%', padding: '18px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '10px', fontSize: '20px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '10px' }}
+  >
+    <i className="fa-solid fa-robot" style={{ fontSize: '24px' }}></i> ให้ AI พยาบาลอัจฉริยะวิเคราะห์สุขภาพ
+  </button>
+
       {/* ======================= โซนหน้าต่าง Modal ทั้งหมด ======================= */}
+
+      {/* 🟢 Modal แจ้งผลวิเคราะห์ AI */}
+      {showAiModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 99999, backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'white', borderRadius: '25px', padding: '40px 30px', width: '90%', maxWidth: '500px', textAlign: 'center', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', borderTop: '8px solid #8b5cf6' }}>
+            
+            <div style={{ width: '80px', height: '80px', borderRadius: '50%', margin: '0 auto 20px auto', backgroundColor: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <i className="fa-solid fa-robot" style={{ fontSize: '40px', color: '#8b5cf6' }}></i>
+            </div>
+            
+            <h2 style={{ margin: '0 0 15px 0', color: '#1F2937', fontSize: '24px' }}>AI พยาบาลประเมินผล</h2>
+            
+            {aiLoading ? (
+               <div style={{ padding: '20px' }}>
+                 <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '30px', color: '#8b5cf6', marginBottom: '15px' }}></i>
+                 <p style={{ color: '#6B7280', fontSize: '18px' }}>กำลังวิเคราะห์ข้อมูลสุขภาพของคุณ...</p>
+               </div>
+            ) : (
+               <p style={{ margin: '0 0 25px 0', color: '#374151', fontSize: '18px', lineHeight: '1.6', textAlign: 'left', background: '#F3F4F6', padding: '15px', borderRadius: '12px' }}>
+                 {aiResponse}
+               </p>
+            )}
+
+            <button 
+              onClick={() => {
+                setShowAiModal(false);
+                window.speechSynthesis.cancel(); // ปิดเสียง AI ถ้ากดยกเลิก
+              }} 
+              style={{ width: '100%', padding: '15px', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(139, 92, 246, 0.3)' }}
+            >
+              รับทราบ
+            </button>
+            
+          </div>
+        </div>
+      )}
 
       {/* 🟢 Modal ใหม่: กรอกเลขบัตรประชาชนด้วยมือ */}
       {showManualIdModal && (

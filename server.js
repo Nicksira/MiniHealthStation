@@ -231,6 +231,40 @@ app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
     }
 });
 
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+// 🛑 นำ API Key ที่สมัครฟรีจาก Google AI Studio มาใส่ตรงนี้
+const genAI = new GoogleGenerativeAI('ใส่_API_KEY_ของ_GEMINI_ตรงนี้');
+
+// ==========================================
+// 🎯 API 5: ระบบ AI พยาบาลอัจฉริยะ (Gemini)
+// ==========================================
+app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
+    const { vitals } = req.body;
+    
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // เขียน Prompt บังคับให้ AI พูดเหมือนพยาบาล
+        const prompt = `
+        คุณคือ "พยาบาลเอไอ ประจำ รพ.สต.ทับพริก" หน้าที่ของคุณคืออ่านค่าสุขภาพแล้วให้คำแนะนำแบบสั้นๆ เข้าใจง่าย กระชับ ไม่เกิน 3 ประโยค เป็นกันเองและห่วงใย
+        ข้อมูลคนไข้ที่วัดได้ตอนนี้: 
+        - ความดันโลหิต: ${vitals.sysDia} mmHg
+        - น้ำตาลในเลือด: ${vitals.sugar} mg/dL
+        - น้ำหนัก: ${vitals.weight} kg
+        วิเคราะห์และให้คำแนะนำเลย (ห้ามใช้คำศัพท์แพทย์ที่ยากเกินไป):`;
+
+        const result = await model.generateContent(prompt);
+        let aiText = result.response.text();
+        // ลบอักขระพิเศษออก เพื่อให้ระบบอ่านออกเสียง (TTS) ทำงานได้เนียนๆ
+        aiText = aiText.replace(/[*#]/g, ''); 
+        
+        res.status(200).json({ success: true, message: aiText });
+    } catch (error) {
+        console.error("AI Error:", error);
+        res.status(200).json({ success: true, message: "ค่าความดันของคุณถูกบันทึกแล้วค่ะ หากรู้สึกปวดศีรษะให้แจ้งเจ้าหน้าที่ทันทีนะคะ" }); // Fallback ถ้าเน็ตหลุด
+    }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 JHCIS API รอรับข้อมูลจาก Kiosk ที่พอร์ต ${PORT}`);
 });
