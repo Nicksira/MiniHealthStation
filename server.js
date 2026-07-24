@@ -4,6 +4,7 @@ import mysql from 'mysql2/promise';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { EdgeTTS } from 'node-edge-tts';
 
 // ตั้งค่า Path สำหรับเซฟรูปภาพ
 const __filename = fileURLToPath(import.meta.url);
@@ -298,49 +299,21 @@ app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
     }
 });
 
-// 🎙️ ฟังก์ชันสร้าง WAV Header สำหรับแปลงเสียง PCM ดิบๆ ให้เบราว์เซอร์เล่นได้
-function addWavHeader(pcmData, sampleRate = 24000, numChannels = 1, bitsPerSample = 16) {
-    const headerLength = 44;
-    const totalDataLen = pcmData.length;
-    const totalFileLen = totalDataLen + headerLength - 8;
-    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-    const blockAlign = numChannels * (bitsPerSample / 8);
-
-    const header = Buffer.alloc(headerLength);
-    header.write('RIFF', 0);
-    header.writeUInt32LE(totalFileLen, 4);
-    header.write('WAVE', 8);
-    header.write('fmt ', 12);
-    header.writeUInt32LE(16, 16); // SubChunk1Size (16 for PCM)
-    header.writeUInt16LE(1, 20);  // AudioFormat (1 for PCM)
-    header.writeUInt16LE(numChannels, 22);
-    header.writeUInt32LE(sampleRate, 24);
-    header.writeUInt32LE(byteRate, 28);
-    header.writeUInt16LE(blockAlign, 32);
-    header.writeUInt16LE(bitsPerSample, 34);
-    header.write('data', 36);
-    header.writeUInt32LE(totalDataLen, 40);
-
-    return Buffer.concat([header, pcmData]);
-}
-
-import { EdgeTTS } from 'node-edge-tts'; // ถ้าใช้ ES Module (import)
-// หรือถ้าไฟล์ server.js เป็น CommonJS ให้ใช้: const { EdgeTTS } = require('node-edge-tts');
-
-// 🎙️ Endpoint สังเคราะห์เสียงพูดด้วย Microsoft Edge Neural TTS (ฟรี 100% ไม่ติดโควตา)
+// ==========================================
+// 🎯 API 6: ระบบเสียงพูดพยาบาล (Edge TTS - ฟรี 100% ไม่ติดโควตา)
+// ==========================================
 app.post('/jhcis-api/tts', checkApiKey, async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ success: false, message: 'No text provided' });
 
     try {
-        // เลือกใช้เสียงพยาบาลสาวธรรมชาติ (th-TH-PremwadeeNeural)
+        // 🌟 ล็อกเป้าหมายเสียง "พยาบาลสาว เปรมวดี" (th-TH-PremwadeeNeural)
         const tts = new EdgeTTS({
             voice: 'th-TH-PremwadeeNeural',
             lang: 'th-TH',
             outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
         });
 
-        // สังเคราะห์เสียงออกมาเป็น Buffer โดยตรง
         const audioBuffer = await tts.synthesizeBuffer(text);
 
         return res.status(200).json({ 
@@ -350,7 +323,7 @@ app.post('/jhcis-api/tts', checkApiKey, async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Edge TTS Error Detail:", error.message);
+        console.error("❌ Edge TTS Error:", error.message);
         return res.status(500).json({ success: false, message: error.message });
     }
 });

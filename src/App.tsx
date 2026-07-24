@@ -1403,8 +1403,13 @@ function App() {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 4000, backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: 'white', borderRadius: '25px', padding: '35px', width: '90%', maxWidth: '550px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', position: 'relative' }}>
             
-            {/* ปุ่มกากบาทปิดมุมขวาบน */}
-            <button onClick={() => { setGuideModal({ ...guideModal, show: false }); window.speechSynthesis.cancel(); }} style={{ position: 'absolute', top: '15px', right: '20px', background: 'none', border: 'none', fontSize: '24px', color: '#94a3b8', cursor: 'pointer' }}>
+            <button onClick={() => { 
+  if (currentAudioRef.current) {
+    currentAudioRef.current.pause();
+    currentAudioRef.current = null;
+  }
+  setGuideModal({ ...guideModal, show: false }); 
+}} style={{ position: 'absolute', top: '15px', right: '20px', background: 'none', border: 'none', fontSize: '24px', color: '#94a3b8', cursor: 'pointer' }}>
               <i className="fa-solid fa-xmark"></i>
             </button>
 
