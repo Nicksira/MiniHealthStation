@@ -170,6 +170,20 @@ function App() {
     }
   }, [vitals.sysDia, vitals.weight, vitals.sugar]); // จับตาดู 3 ค่านี้ ถ้าเปลี่ยนให้ยิง AI
 
+  // 🚨 ระบบตรวจสอบความดันวิกฤตและเด้งแจ้งเตือนเต็มหน้าจอแบบอัตโนมัติ
+  useEffect(() => {
+    if (vitals.sysDia !== '---') {
+      const [sys, dia] = vitals.sysDia.split('/').map(Number);
+      if (sys >= 180 || dia >= 120) {
+        setShowEmergencyModal(true); // สั่งเปิด Modal สีแดงคลุมเต็มหน้าจอ
+        // สั่งให้ AI พูดเตือนฉุกเฉินทันที!
+        speak('อันตราย ความดันโลหิตของคุณสูงถึงขั้นวิกฤต กรุณานั่งพัก และแจ้งเจ้าหน้าที่ทันทีค่ะ'); 
+      } else {
+        setShowEmergencyModal(false);
+      }
+    }
+  }, [vitals.sysDia]);
+
   // 1. เพิ่ม State สำหรับเก็บรูปภาพคนไข้ (Base64)
   const [patientImage, setPatientImage] = useState<string | null>(null);
   
