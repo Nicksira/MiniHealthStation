@@ -27,6 +27,60 @@ function App() {
   const [showConfirmQueueModal, setShowConfirmQueueModal] = useState(false);
   const [showBluetoothModal, setShowBluetoothModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  // 🟢 State สำหรับหน้าต่างแนะนำการใช้งาน (Visual Guide)
+  const [guideModal, setGuideModal] = useState<{show: boolean, type: string, title: string, gifUrl: string, desc: string, action: Function | null}>({
+    show: false, type: '', title: '', gifUrl: '', desc: '', action: null
+  });
+
+  // 🟢 ฟังก์ชันเปิดหน้าต่าง Guide พร้อมสั่งให้ AI พากย์เสียงสอน
+  const openGuideModal = (type: string) => {
+    let title = ''; let gifUrl = ''; let desc = ''; let action = null;
+
+    switch(type) {
+      case 'bp':
+        title = 'วิธีวัดความดันโลหิต';
+        gifUrl = '/guide-bp.gif'; // 🌟 เตรียมไฟล์ GIF หรือรูปไปใส่ในโฟลเดอร์ public
+        desc = 'สอดแขนเข้าไปในอุโมงค์ให้พอดีกับข้อพับ วางแขนราบบนโต๊ะ นั่งหลังตรง แล้วอยู่นิ่งๆ นะคะ';
+        action = connectBluetoothBP;
+        break;
+      case 'o2':
+        title = 'วิธีวัดออกซิเจนปลายนิ้ว';
+        gifUrl = '/guide-o2.gif';
+        desc = 'สอดนิ้วชี้เข้าไปในเครื่องให้สุด วางมือราบกับโต๊ะ แล้วอยู่นิ่งๆ ห้ามขยับนิ้วค่ะ';
+        action = connectBluetoothO2;
+        break;
+      case 'weight':
+        title = 'วิธีชั่งน้ำหนัก';
+        gifUrl = '/guide-weight.gif';
+        desc = 'ถอดรองเท้า แล้วก้าวขึ้นยืนบนเครื่องชั่งน้ำหนักให้เต็มเท้าทั้งสองข้างค่ะ';
+        action = connectBluetoothWeight;
+        break;
+      case 'temp':
+        title = 'วิธีวัดอุณหภูมิ';
+        gifUrl = '/guide-temp.gif';
+        desc = 'นำเครื่องวัดจ่อที่บริเวณหน้าผาก ห่างประมาณ 3 เซนติเมตร แล้วกดปุ่มวัดค่ะ';
+        action = connectBluetoothTemp;
+        break;
+      case 'sugar':
+        title = 'วิธีวัดน้ำตาลในเลือด';
+        gifUrl = '/guide-sugar.gif';
+        desc = 'เปลี่ยนเข็มใหม่ทุกครั้ง เจาะที่ปลายนิ้วด้านข้าง แล้วบีบเลือดลงบนแผ่นตรวจค่ะ';
+        action = connectBluetoothSugar;
+        break;
+    }
+
+    setGuideModal({ show: true, type, title, gifUrl, desc, action });
+    speak(desc); // 🎙️ สั่งให้ระบบพูดสอนวิธีใช้งานทันทีที่ Pop-up เด้งขึ้นมา!
+  };
+
+  const handleStartDeviceConnection = async () => {
+    if (guideModal.action) {
+      // ปิดหน้าต่าง Guide แล้วค่อยเรียกฟังก์ชันเชื่อมต่อ Bluetooth
+      setGuideModal({ ...guideModal, show: false });
+      await guideModal.action(); 
+    }
+  };
   
   // 🟢 State สำหรับระบบ "กรอกเลขบัตร 13 หลัก (ไม่มีบัตร)"
   const [showManualIdModal, setShowManualIdModal] = useState(false);
@@ -931,19 +985,19 @@ function App() {
           </div>
 
           <div className="device-buttons">
-            <button className="btn-device" onClick={connectBluetoothO2} style={{ border: '2px solid #3b82f6' }}>
+            <button className="btn-device" onClick={() => openGuideModal('o2')} style={{ border: '2px solid #3b82f6' }}>
               อ๊อกซิเจนในเลือด <i className="fa-regular fa-hand-point-up" style={{ color: 'rgb(255, 212, 59)', marginLeft: '8px' }}></i>
             </button>
-            <button className="btn-device" onClick={connectBluetoothWeight} style={{ border: '2px solid #3b82f6' }}>
+            <button className="btn-device" onClick={() => openGuideModal('weight')} style={{ border: '2px solid #3b82f6' }}>
               ชั่งน้ำหนัก <i className="fa-solid fa-weight-scale" style={{ color: 'rgb(99, 230, 190)', marginLeft: '8px' }}></i>
             </button>
-            <button className="btn-device" onClick={connectBluetoothTemp} style={{ border: '2px solid #3b82f6' }}>
+            <button className="btn-device" onClick={() => openGuideModal('temp')} style={{ border: '2px solid #3b82f6' }}>
               วัดอุณหภูมิ <i className="fa-solid fa-temperature-low" style={{ color: 'rgb(248, 126, 0)',marginLeft: '8px' }}></i>
             </button>
-            <button className="btn-device" onClick={connectBluetoothBP} style={{ border: '2px solid #3b82f6' }}>
+            <button className="btn-device" onClick={() => openGuideModal('bp')} style={{ border: '2px solid #3b82f6' }}>
               วัดความดันฯ <i className="fa-solid fa-gauge-high" style={{ color: 'rgb(116, 192, 252)', marginLeft: '8px' }}></i>
             </button>
-            <button className="btn-device" onClick={connectBluetoothSugar} style={{ border: '2px solid #3b82f6' }}>
+            <button className="btn-device" onClick={() => openGuideModal('sugar')} style={{ border: '2px solid #3b82f6' }}>
               น้ำตาลในเลือด <i className="fa-solid fa-droplet" style={{ color: 'rgb(244, 30, 30)', marginLeft: '8px' }}></i>
             </button>
           </div>
@@ -1288,6 +1342,50 @@ function App() {
               <button onClick={() => setShowPasswordModal(false)} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', backgroundColor: '#F3F4F6', color: '#374151', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }}>ยกเลิก</button>
               <button onClick={handlePasswordSubmit} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', backgroundColor: '#4F46E5', color: 'white', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }}>ยืนยัน</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Modal ภาพเคลื่อนไหวแนะนำการใช้งาน (Visual Guide) */}
+      {guideModal.show && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 4000, backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'white', borderRadius: '25px', padding: '35px', width: '90%', maxWidth: '550px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', position: 'relative' }}>
+            
+            {/* ปุ่มกากบาทปิดมุมขวาบน */}
+            <button onClick={() => { setGuideModal({ ...guideModal, show: false }); window.speechSynthesis.cancel(); }} style={{ position: 'absolute', top: '15px', right: '20px', background: 'none', border: 'none', fontSize: '24px', color: '#94a3b8', cursor: 'pointer' }}>
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+
+            <h2 style={{ color: '#1e40af', fontSize: '26px', margin: '0 0 15px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+              <i className="fa-solid fa-person-chalkboard"></i> {guideModal.title}
+            </h2>
+            
+            {/* กรอบใส่ภาพเคลื่อนไหว (GIF) */}
+            <div style={{ width: '100%', height: '280px', backgroundColor: '#f1f5f9', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', overflow: 'hidden', border: '2px dashed #cbd5e1' }}>
+              {/* ถ้ายังไม่มีไฟล์ GIF ระบบจะโชว์กรอบเทาๆ เขียนว่า รออัปโหลดรูป แทนชั่วคราวครับ */}
+              <img 
+                src={guideModal.gifUrl} 
+                alt="คำแนะนำ" 
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling.style.display = 'block'; }}
+              />
+              <div style={{ display: 'none', color: '#64748b', fontSize: '16px' }}>
+                <i className="fa-regular fa-image" style={{ fontSize: '40px', marginBottom: '10px', display: 'block' }}></i>
+                รอเตรียมภาพเคลื่อนไหว (GIF)
+              </div>
+            </div>
+
+            <p style={{ fontSize: '20px', color: '#334155', lineHeight: '1.6', marginBottom: '25px', fontWeight: 'bold' }}>
+              {guideModal.desc}
+            </p>
+
+            <button 
+              onClick={handleStartDeviceConnection} 
+              style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', borderRadius: '15px', fontSize: '22px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 8px 15px rgba(37, 99, 235, 0.3)' }}
+            >
+              <i className="fa-brands fa-bluetooth-b" style={{ animation: 'pulse 1.5s infinite' }}></i> พร้อมแล้ว! เริ่มเชื่อมต่ออุปกรณ์
+            </button>
+            
           </div>
         </div>
       )}
