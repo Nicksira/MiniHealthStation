@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 
@@ -42,52 +42,6 @@ function App() {
   const [isTestingMode, setIsTestingMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  // ==========================================
-  // 🎙️ ระบบเสียงพากย์ (Text-to-Speech)
-  // ==========================================
-  const speakText = (text) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel(); // ตัดเสียงเก่าทิ้งก่อน
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'th-TH';
-      utterance.rate = 0.9; // พูดช้าลงนิดนึงให้ผู้สูงอายุฟังทัน
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
-  // ==========================================
-  // ⏱️ ระบบรักษาความปลอดภัย: Auto-Logout 10 นาที
-  // ==========================================
-  const timerRef = useRef(null);
-
-  const resetIdleTimer = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    // 10 นาที = 10 * 60 * 1000 = 600,000 มิลลิวินาที
-    timerRef.current = setTimeout(() => {
-      // เรียกฟังก์ชันรีเซ็ตค่าทั้งหมดกลับไปหน้าแรก (ใส่ฟังก์ชันรีเซ็ตของคุณสิรภพตรงนี้)
-      // เช่น handleReset(); 
-      speakText("หมดเวลาการทำรายการ ระบบได้ล้างข้อมูลเพื่อความปลอดภัยค่ะ");
-      console.log("🔒 Auto-Logout triggered after 10 minutes of inactivity.");
-    }, 600000); 
-  };
-
-  useEffect(() => {
-    // ดักจับการเคลื่อนไหวเพื่อรีเซ็ตเวลา
-    window.addEventListener('mousemove', resetIdleTimer);
-    window.addEventListener('keydown', resetIdleTimer);
-    window.addEventListener('click', resetIdleTimer);
-    window.addEventListener('touchstart', resetIdleTimer);
-    
-    resetIdleTimer(); // เริ่มนับเวลาตอนโหลดหน้าจอ
-
-    return () => {
-      window.removeEventListener('mousemove', resetIdleTimer);
-      window.removeEventListener('keydown', resetIdleTimer);
-      window.removeEventListener('click', resetIdleTimer);
-      window.removeEventListener('touchstart', resetIdleTimer);
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
 
   // ==========================================
   // 🕵️‍♂️ ทางเข้าลับหน้า Admin (กดโลโก้ 5 ครั้ง)
@@ -98,10 +52,10 @@ function App() {
   const handleLogoClick = () => {
     setAdminClicks(prev => prev + 1);
     if (adminClicks + 1 >= 5) {
-      setShowSettings(true);    // 🌟 สั่งให้เปิดหน้าต่าง Settings
-      setAdminTab('data');      // 🌟 สั่งให้กระโดดไปที่แท็บ 'ข้อมูลค้างส่ง (Offline)' ทันที
+      setShowSettings(true);    
+      setAdminTab('data');      
       setAdminClicks(0);
-      speakText("เข้าสู่โหมดผู้ดูแลระบบ");
+      speak("เข้าสู่โหมดผู้ดูแลระบบ"); // 🌟 แก้จาก speakText เป็น speak
     }
   };
   
