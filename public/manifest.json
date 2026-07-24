@@ -1,0 +1,21 @@
+{
+  "name": "Mini Health Station",
+  "short_name": "Mini Health",
+  "description": "ระบบตรวจวัดสุขภาพอัตโนมัติ รพ.สต.ทับพริก",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4bc0c8",
+  "icons": [
+    {
+      "src": "/TK.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/TK.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

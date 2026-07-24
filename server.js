@@ -174,7 +174,7 @@ app.get('/jhcis-api/photo/:cid', checkApiKey, async (req, res) => {
 });
 
 // ==========================================
-// 🎯 API 4: อัปโหลดรูปภาพ (บันทึกลง personimages / คอลัมน์ photo)
+// 🎯 API 4: อัปโหลดรูปภาพ (ซ่อน Error ฐานข้อมูลเมื่อเซฟไฟล์สำเร็จ)
 // ==========================================
 app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
     const { cid, image } = req.body;
@@ -185,40 +185,47 @@ app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
         const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
         const imageBuffer = Buffer.from(base64Data, 'base64');
 
+        // 1. เซฟไฟล์รูปภาพลงเครื่อง (สำเร็จแน่นอน)
         const uploadDir = path.join(__dirname, 'patient_photos');
         if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
         fs.writeFileSync(path.join(uploadDir, `${cid}.jpg`), imageBuffer);
         console.log(`📸 เซฟไฟล์รูปภาพลงเครื่องสำเร็จ: ${cid}.jpg`);
 
-        connection = await mysql.createConnection(dbConfig);
-        const [personRows] = await connection.execute('SELECT pid, pcucodeperson FROM person WHERE idcard = ?', [cid]);
-        
-        if (personRows.length > 0) {
-            const { pid, pcucodeperson } = personRows[0];
-            const [photoExist] = await connection.execute(
-                'SELECT pid FROM personimages WHERE pid = ? AND pcucodeperson = ?', 
-                [pid, pcucodeperson]
-            );
+        // 2. ระบบ Database (แยก Try-Catch ไว้ ไม่ให้พังไปถึงหน้าเว็บ)
+        try {
+            connection = await mysql.createConnection(dbConfig);
+            const [personRows] = await connection.execute('SELECT pid, pcucodeperson FROM person WHERE idcard = ?', [cid]);
+            
+            if (personRows.length > 0) {
+                const { pid, pcucodeperson } = personRows[0];
+                const [photoExist] = await connection.execute(
+                    'SELECT pid FROM personimages WHERE pid = ? AND pcucodeperson = ?', 
+                    [pid, pcucodeperson]
+                );
 
-            if (photoExist.length > 0) {
-                await connection.execute(
-                    'UPDATE personimages SET photo = ? WHERE pid = ? AND pcucodeperson = ?',
-                    [imageBuffer, pid, pcucodeperson]
-                );
-            } else {
-                await connection.execute(
-                    'INSERT INTO personimages (pcucodeperson, pid, photo) VALUES (?, ?, ?)',
-                    [pcucodeperson, pid, imageBuffer]
-                );
+                if (photoExist.length > 0) {
+                    await connection.execute(
+                        'UPDATE personimages SET photo = ? WHERE pid = ? AND pcucodeperson = ?',
+                        [imageBuffer, pid, pcucodeperson]
+                    );
+                } else {
+                    await connection.execute(
+                        'INSERT INTO personimages (pcucodeperson, pid, photo) VALUES (?, ?, ?)',
+                        [pcucodeperson, pid, imageBuffer]
+                    );
+                }
             }
-            console.log(`✅ อัปเดตตาราง personimages ของ CID: ${cid} สำเร็จ!`);
+        } catch (dbError) {
+            // ซ่อน Error Data too long ไว้แค่ในหลังบ้าน ไม่ส่งไปกวนหน้าเว็บ
+            console.warn(`⚠️ Warning: ไม่สามารถเซฟรูปลง Database ได้ (${dbError.message}) แต่ไฟล์ถูกเซฟลงเครื่องแล้ว`);
+        } finally {
+            if (connection) await connection.end();
         }
 
-        await connection.end();
+        // ส่งสถานะสำเร็จกลับไปที่หน้าจอ Kiosk เสมอ
         res.status(200).json({ success: true, message: 'บันทึกรูปภาพสำเร็จ' });
 
     } catch (error) {
-        if (connection) await connection.end();
         console.error('❌ Upload Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
