@@ -689,16 +689,49 @@ function App() {
     }
   };
 
-  // 🎙️ ฟังก์ชันให้ระบบพูดออกเสียงภาษาไทย
+  // ==========================================
+  // 🎙️ ฟังก์ชันพากย์เสียง (อัปเกรดเสียงให้เป็นธรรมชาติ ไม่เป็นหุ่นยนต์)
+  // ==========================================
   const speak = (text: string) => {
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel(); // ล้างคิวเสียงเก่าก่อน
+      window.speechSynthesis.cancel(); // ล้างคิวเสียงเก่าที่ค้างอยู่
+      
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'th-TH'; // บังคับเสียงภาษาไทย
-      utterance.rate = 1.0;     // ความเร็วปกติ
+      
+      // ดึงรายการเสียงทั้งหมดที่มีในบราวเซอร์
+      const voices = window.speechSynthesis.getVoices();
+      
+      // 🌟 ล็อกเป้าหาเสียง "Google ไทย" (เสียงพยาบาลสาวธรรมชาติที่ต่อเน็ต)
+      // หรือเสียงคุณภาพสูงอื่นๆ ถ้าใช้ระบบปฏิบัติการอื่น
+      const thaiVoices = voices.filter(v => v.lang.includes('th'));
+      const premiumVoice = thaiVoices.find(v => v.name.includes('Google')) || 
+                           thaiVoices.find(v => v.name.includes('Narisa')) || // สำหรับฝั่ง Apple
+                           thaiVoices.find(v => v.name.includes('Kanya'));
+
+      if (premiumVoice) {
+        utterance.voice = premiumVoice; // บังคับใช้เสียงธรรมชาติ
+      } else if (thaiVoices.length > 0) {
+        utterance.voice = thaiVoices[0]; // สำรองกรณีไม่มีเน็ต
+      }
+
+      utterance.lang = 'th-TH';
+      
+      // 🎛️ ปรับแต่งความถี่และจังหวะ (Voice Tuning)
+      utterance.rate = 0.85;  // ลดความเร็วลงนิดนึง (0.85) ให้ผู้สูงอายุฟังชัดๆ ไม่รวบคำ
+      utterance.pitch = 1.15; // ปรับโทนเสียงให้สูงขึ้นนิดนึง (1.15) จะฟังดูนุ่มนวลและอ่อนหวานขึ้น
+
       window.speechSynthesis.speak(utterance);
     }
   };
+
+  // 🌟 บังคับให้บราวเซอร์โหลดเสียงเตรียมไว้ล่วงหน้าตั้งแต่เปิดหน้าเว็บ
+  useEffect(() => {
+    const loadVoices = () => window.speechSynthesis.getVoices();
+    loadVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
 
   // ⏱️ ระบบรักษาความปลอดภัย Auto-Logout 10 นาที (600,000 ms)
   useEffect(() => {

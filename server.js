@@ -231,7 +231,7 @@ app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
     }
 });
 // ==========================================
-// 🎯 API 5: ระบบ AI พยาบาลอัจฉริยะ (ใช้โมเดลตามโควตาจริงในระบบ)
+// 🎯 API 5: ระบบ AI พยาบาลอัจฉริยะ (Smart Triage + JSON Output)
 // ==========================================
 const GEMINI_API_KEY = 'AIzaSyDvSnOr12Z9J2wd8wpPjtv5qOQ3laHpGaY'; 
 
@@ -240,47 +240,58 @@ app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
     
     try {
         const prompt = `
-        คุณคือ "พยาบาลเอไอ ประจำ รพ.สต.ทับพริก" หน้าที่ของคุณคืออ่านค่าสุขภาพแล้วให้คำแนะนำแบบสั้นๆ เข้าใจง่าย กระชับ ไม่เกิน 2-3 ประโยค ด้วยความห่วงใย
-
+        คุณคือ "พยาบาลเอไอ ประจำ โรงพยาบาลส่งเสริมสุขภาพตำบลทับพริก" หน้าที่ของคุณคือประเมินความเสี่ยงสุขภาพคนไข้
+        
         กฎสำคัญที่ต้องปฏิบัติตามอย่างเคร่งครัด:
-        1. ต้องเรียกผู้รับบริการว่า "คนไข้" เท่านั้น (เช่น "คนไข้คะ...", "ความดันของคนไข้...")
-        2. ห้ามใช้คำเรียก หรือสรรพนามอื่นๆ เด็ดขาด (ห้ามเรียก คุณ, พี่, น้อง, ลุง, ป้า, ตา, ยาย)
-        3. ห้ามใช้คำศัพท์แพทย์ที่ยากเกินไป และไม่ต้องมีอักขระพิเศษ (เช่น * หรือ #)
+        1. ต้องเรียกผู้รับบริการว่า "คนไข้" เท่านั้น
+        2. ห้ามใช้คำเรียกอื่นๆ เด็ดขาด (ห้ามเรียก คุณ, พี่, น้อง, ลุง, ป้า)
+        3. ประเมินและจัดระดับความเร่งด่วน (Triage) เป็น 3 สี คือ green (ปกติ), yellow (เฝ้าระวัง), red (วิกฤต/ต้องพบแพทย์ทันที)
+        4. ตอบกลับเป็น JSON Format ตามโครงสร้างนี้เท่านั้น ห้ามมีข้อความอื่นปน:
+        {
+            "color": "green หรือ yellow หรือ red",
+            "message": "คำแนะนำแบบสั้นๆ เป็นกันเอง ห่วงใย ไม่เกิน 2 ประโยค"
+        }
 
         ข้อมูลคนไข้ที่วัดได้ตอนนี้: 
         - ความดันโลหิต: ${vitals.sysDia} mmHg
         - น้ำตาลในเลือด: ${vitals.sugar} mg/dL
         - น้ำหนัก: ${vitals.weight} kg
-        
-        วิเคราะห์และให้คำแนะนำเลย:`;
+        `;
 
-        // 🌟 เปลี่ยนมาใช้รุ่น 3.5 Flash Lite เพื่อรับโควตาฟรี 500 ครั้ง/วัน
+        // ใช้โมเดล 3.5 Flash Lite เพื่อโควตา 500 ครั้ง/วัน
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: prompt }]
-                }]
+                contents: [{ parts: [{ text: prompt }] }],
+                // บังคับให้ AI ตอบกลับมาเป็น JSON เสมอ (Enterprise Feature)
+                generationConfig: { responseMimeType: "application/json" }
             })
         });
 
         const data = await response.json();
 
         if (data.candidates && data.candidates.length > 0) {
-            let aiText = data.candidates[0].content.parts[0].text;
-            aiText = aiText.replace(/[*#]/g, ''); // ลบอักขระพิเศษออก
+            // ถอดรหัส JSON ที่ AI ส่งกลับมา
+            const aiResult = JSON.parse(data.candidates[0].content.parts[0].text);
             
-            console.log("✅ AI วิเคราะห์สำเร็จ:", aiText);
-            return res.status(200).json({ success: true, message: aiText });
+            console.log(`✅ AI Triage [${aiResult.color.toUpperCase()}]:`, aiResult.message);
+            return res.status(200).json({ 
+                success: true, 
+                message: aiResult.message,
+                triageColor: aiResult.color // ส่งสีกลับไปโชว์ที่หน้าจอ/หน้า Admin
+            });
         } else {
-            console.error("❌ Google Response Error:", JSON.stringify(data));
-            throw new Error("Invalid response format from Google");
+            throw new Error("Invalid response from AI");
         }
 
     } catch (error) {
         console.error("❌ AI Error Detail:", error.message);
-        return res.status(200).json({ success: true, message: "ค่าความดันของคุณถูกบันทึกแล้วค่ะ หากรู้สึกปวดศีรษะให้แจ้งเจ้าหน้าที่ทันทีนะคะ" });
+        return res.status(200).json({ 
+            success: true, 
+            message: "ค่าความดันของคนไข้ถูกบันทึกแล้วค่ะ หากรู้สึกปวดศีรษะให้แจ้งเจ้าหน้าที่ทันทีนะคะ",
+            triageColor: "yellow" // กรณี API ล่ม ให้เฝ้าระวังไว้ก่อน
+        });
     }
 });
 
