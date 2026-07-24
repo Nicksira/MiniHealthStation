@@ -1,6 +1,6 @@
 {
   "name": "Mini Health Station",
-  "short_name": "Mini Health",
+  "short_name": "Mini Health Station",
   "description": "ระบบตรวจวัดสุขภาพอัตโนมัติ รพ.สต.ทับพริก",
   "start_url": "/",
   "display": "standalone",
