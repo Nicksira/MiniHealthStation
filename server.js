@@ -234,7 +234,7 @@ app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // 🛑 นำ API Key ที่สมัครฟรีจาก Google AI Studio มาใส่ตรงนี้
-const genAI = new GoogleGenerativeAI('ใส่_API_KEY_ของ_GEMINI_ตรงนี้');
+const genAI = new GoogleGenerativeAI('');
 
 // ==========================================
 // 🎯 API 5: ระบบ AI พยาบาลอัจฉริยะ (Gemini)

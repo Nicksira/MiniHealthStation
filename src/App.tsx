@@ -19,6 +19,33 @@ function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiResponse, setAiResponse] = useState('');
+  // 🧠 ให้ AI ทำงานอัตโนมัติ เมื่อมีการวัดค่าความดัน น้ำหนัก หรือน้ำตาลเสร็จสิ้น
+  useEffect(() => {
+    // จะให้ AI ทำงาน ก็ต่อเมื่อมีค่าใดค่าหนึ่งที่ไม่ใช่ '---' (คือเริ่มวัดแล้ว)
+    if (vitals.sysDia !== '---' || vitals.weight !== '---' || vitals.sugar !== '---') {
+      const fetchAI = async () => {
+        setAiLoading(true);
+        try {
+          const res = await axios.post(`${API_BASE_URL}/jhcis-api/ai-analyze`, { vitals }, { headers: { 'x-api-key': API_KEY } });
+          setAiResponse(res.data.message);
+          
+          // ให้ AI พูดสรุปให้ฟังด้วย (ถ้าไม่อยากให้พูดออโต้ ลบบรรทัด speak นี้ออกได้ครับ)
+          speak(res.data.message); 
+        } catch (e) {
+          setAiResponse("ไม่สามารถเชื่อมต่อระบบ AI ได้ในขณะนี้");
+        }
+        setAiLoading(false);
+      };
+      
+      // หน่วงเวลา 2 วินาทีหลังจากวัดค่าเสร็จ เพื่อให้คนไข้กรอกข้อมูลนิ่งก่อน แล้วค่อยยิง AI
+      const timeoutId = setTimeout(() => {
+        fetchAI();
+      }, 2000); 
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [vitals.sysDia, vitals.weight, vitals.sugar]); // จับตาดู 3 ค่านี้ ถ้าเปลี่ยนให้ยิง AI
+  
 
   // 🟢 State สำหรับหน้าต่าง Modal ต่างๆ
   const [showTelemedModal, setShowTelemedModal] = useState(false);
@@ -946,6 +973,35 @@ function App() {
                 </div>
               </div>
 
+              {/* 🤖 โซน AI สรุปผลอัตโนมัติ */}
+              {(vitals.sysDia !== '---' || vitals.weight !== '---' || vitals.sugar !== '---') && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '15px', padding: '20px', background: 'linear-gradient(135deg, #f3e8ff, #e0e7ff)', borderRadius: '12px', borderLeft: '5px solid #8b5cf6', boxShadow: '0 4px 6px rgba(139, 92, 246, 0.15)' }}>
+                  
+                  <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 10px rgba(139, 92, 246, 0.4)' }}>
+                    {aiLoading ? (
+                      <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '24px', color: 'white' }}></i>
+                    ) : (
+                      <i className="fa-solid fa-robot" style={{ fontSize: '24px', color: 'white' }}></i>
+                    )}
+                  </div>
+                  
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ margin: '0 0 8px 0', color: '#6d28d9', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      ✨ AI พยาบาลประเมินว่า:
+                    </h4>
+                    {aiLoading ? (
+                      <p style={{ margin: 0, color: '#64748b', fontSize: '16px', fontStyle: 'italic', animation: 'pulse 1.5s infinite' }}>
+                        กำลังวิเคราะห์ข้อมูลสุขภาพของคุณ กรุณารอสักครู่...
+                      </p>
+                    ) : (
+                      <p style={{ margin: 0, color: '#334155', fontSize: '16px', lineHeight: '1.6', fontWeight: '500' }}>
+                        {aiResponse || "กรุณาวัดค่าต่างๆ เพื่อให้ AI ประเมินผล"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {healthAnalysis.alerts.map((alert, idx) => (
                 <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '15px', padding: '15px', background: `${alert.color}15`, borderRadius: '10px' }}>
                   <i className={alert.icon} style={{ fontSize: '32px', color: alert.color, marginTop: '2px' }}></i>
@@ -1020,7 +1076,7 @@ function App() {
     }}
     style={{ width: '100%', padding: '18px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '10px', fontSize: '20px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '10px' }}
   >
-    <i className="fa-solid fa-robot" style={{ fontSize: '24px' }}></i> ให้ AI พยาบาลอัจฉริยะวิเคราะห์สุขภาพ
+    
   </button>
 
       {/* ======================= โซนหน้าต่าง Modal ทั้งหมด ======================= */}
