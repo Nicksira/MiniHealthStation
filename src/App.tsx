@@ -977,14 +977,12 @@ function App() {
               {(vitals.sysDia !== '---' || vitals.weight !== '---' || vitals.sugar !== '---') && (
                 <div className="assessment-item" style={{ display: 'flex', alignItems: 'flex-start', gap: '15px', padding: '15px', background: '#f8fafc', borderRadius: '10px' }}>
                   
-                  {/* วงกลมรองหลังปรับเป็นโทนฟ้าอ่อน เพื่อให้ไอคอนสีหมอโดดเด่นสวยงาม */}
-                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {aiLoading ? (
-                      <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '18px', color: 'rgb(116, 192, 252)' }}></i>
-                    ) : (
-                      <i className="fa-solid fa-user-doctor" style={{ color: 'rgb(116, 192, 252)', fontSize: '20px' }}></i>
-                    )}
-                  </div>
+                  {/* ถอดวงกลมออก และปรับขนาดเป็น 32px ให้เท่ากับไอคอนอื่นๆ */}
+                  {aiLoading ? (
+                    <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '32px', color: 'rgb(116, 192, 252)', marginTop: '2px' }}></i>
+                  ) : (
+                    <i className="fa-solid fa-user-doctor" style={{ fontSize: '32px', color: 'rgb(116, 192, 252)', marginTop: '2px' }}></i>
+                  )}
                   
                   <div style={{ flex: 1 }}>
                     <h4 style={{ margin: '0 0 5px 0', color: '#475569', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
