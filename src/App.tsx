@@ -708,11 +708,10 @@ function App() {
     return new Blob(byteArrays, { type: contentType });
   };
 
-  // 🎙️ ฟังก์ชันพากย์เสียง (พร้อมระบบ Cache และระบบตัดเสียงเมื่อปิด)
+  // 🎙️ ฟังก์ชันพากย์เสียงผ่าน Edge TTS (ฟรี ไม่ติดโควตา)
   const speak = async (text: string) => {
     if (!text) return;
 
-    // ถ้ามีเสียงเก่ากำลังเล่นอยู่ ให้หยุดทันที
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
@@ -721,16 +720,16 @@ function App() {
     try {
       let audioUrl = audioCacheRef.current[text];
 
-      // ถ้ายังไม่เคยเปิดข้อความนี้ ให้ขอจากเซิร์ฟเวอร์ (ครั้งแรกจะช้าหน่อย ครั้งต่อไปจะเร็วปรื๊ด)
       if (!audioUrl) {
         const response = await axios.post(`${API_BASE_URL}/jhcis-api/tts`, { text }, {
           headers: { 'x-api-key': API_KEY }
         });
 
         if (response.data.success && response.data.audioContent) {
-          const audioBlob = b64toBlob(response.data.audioContent, 'audio/wav');
+          // แปลง Base64 เป็น MP3 Blob
+          const audioBlob = b64toBlob(response.data.audioContent, 'audio/mp3');
           audioUrl = URL.createObjectURL(audioBlob);
-          audioCacheRef.current[text] = audioUrl; // บันทึกเก็บใส่แคชทันที
+          audioCacheRef.current[text] = audioUrl; // แคชไว้ใช้ซ้ำ
         }
       }
 

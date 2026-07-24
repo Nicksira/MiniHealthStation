@@ -324,61 +324,33 @@ function addWavHeader(pcmData, sampleRate = 24000, numChannels = 1, bitsPerSampl
     return Buffer.concat([header, pcmData]);
 }
 
-// 🎙️ Endpoint สังเคราะห์เสียงพูดด้วย Gemini API (รุ่น gemini-3.1-flash-tts-preview / เสียง Achernar)
+import { EdgeTTS } from 'node-edge-tts'; // ถ้าใช้ ES Module (import)
+// หรือถ้าไฟล์ server.js เป็น CommonJS ให้ใช้: const { EdgeTTS } = require('node-edge-tts');
+
+// 🎙️ Endpoint สังเคราะห์เสียงพูดด้วย Microsoft Edge Neural TTS (ฟรี 100% ไม่ติดโควตา)
 app.post('/jhcis-api/tts', checkApiKey, async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ success: false, message: 'No text provided' });
 
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent?key=${GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [
-                    {
-                        parts: [
-                            { text: `อ่านข้อความนี้ออกเสียงเป็นเสียงพูดภาษาไทยด้วยน้ำเสียงนุ่มนวล เป็นธรรมชาติ สำหรับผู้สูงอายุ อ่านตามนี้เป๊ะๆ: ${text}` }
-                        ]
-                    }
-                ],
-                generationConfig: {
-                    responseModalities: ["AUDIO"],
-                    speechConfig: {
-                        voiceConfig: {
-                            prebuiltVoiceConfig: {
-                                voiceName: "Achernar"
-                            }
-                        }
-                    }
-                }
-            })
+        // เลือกใช้เสียงพยาบาลสาวธรรมชาติ (th-TH-PremwadeeNeural)
+        const tts = new EdgeTTS({
+            voice: 'th-TH-PremwadeeNeural',
+            lang: 'th-TH',
+            outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
         });
 
-        const data = await response.json();
-        if (!response.ok) {
-            console.error("❌ Gemini TTS API Error Response:", JSON.stringify(data, null, 2));
-            throw new Error(data.error?.message || 'Gemini TTS API Error');
-        }
+        // สังเคราะห์เสียงออกมาเป็น Buffer โดยตรง
+        const audioBuffer = await tts.synthesizeBuffer(text);
 
-        const candidate = data.candidates?.[0];
-        const part = candidate?.content?.parts?.[0];
-
-        if (part && part.inlineData && part.inlineData.data) {
-            // แปลงข้อมูลเสียง PCM ดิบให้เป็น WAV Buffer ที่สมบูรณ์
-            const pcmBuffer = Buffer.from(part.inlineData.data, 'base64');
-            const wavBuffer = addWavHeader(pcmBuffer, 24000, 1, 16);
-            
-            return res.status(200).json({ 
-                success: true, 
-                audioContent: wavBuffer.toString('base64'),
-                mimeType: 'audio/wav'
-            });
-        } else {
-            throw new Error("No audio data returned from Gemini API");
-        }
+        return res.status(200).json({ 
+            success: true, 
+            audioContent: audioBuffer.toString('base64'),
+            mimeType: 'audio/mp3'
+        });
 
     } catch (error) {
-        console.error("❌ TTS Error Detail:", error.message);
+        console.error("❌ Edge TTS Error Detail:", error.message);
         return res.status(500).json({ success: false, message: error.message });
     }
 });
