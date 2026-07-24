@@ -240,15 +240,22 @@ app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
     
     try {
         const prompt = `
-        คุณคือ "พยาบาลเอไอ ประจำ รพ.สต.ทับพริก" หน้าที่ของคุณคืออ่านค่าสุขภาพแล้วให้คำแนะนำแบบสั้นๆ เข้าใจง่าย กระชับ ไม่เกิน 2-3 ประโยค โดยให้เรียกว่าคนไข้
+        คุณคือ "พยาบาลเอไอ ประจำ รพ.สต.ทับพริก" หน้าที่ของคุณคืออ่านค่าสุขภาพแล้วให้คำแนะนำแบบสั้นๆ เข้าใจง่าย กระชับ ไม่เกิน 2-3 ประโยค ด้วยความห่วงใย
+
+        กฎสำคัญที่ต้องปฏิบัติตามอย่างเคร่งครัด:
+        1. ต้องเรียกผู้รับบริการว่า "คนไข้" เท่านั้น (เช่น "คนไข้คะ...", "ความดันของคนไข้...")
+        2. ห้ามใช้คำเรียก หรือสรรพนามอื่นๆ เด็ดขาด (ห้ามเรียก คุณ, พี่, น้อง, ลุง, ป้า, ตา, ยาย)
+        3. ห้ามใช้คำศัพท์แพทย์ที่ยากเกินไป และไม่ต้องมีอักขระพิเศษ (เช่น * หรือ #)
+
         ข้อมูลคนไข้ที่วัดได้ตอนนี้: 
         - ความดันโลหิต: ${vitals.sysDia} mmHg
         - น้ำตาลในเลือด: ${vitals.sugar} mg/dL
         - น้ำหนัก: ${vitals.weight} kg
-        วิเคราะห์และให้คำแนะนำเลย (ห้ามใช้คำศัพท์แพทย์ที่ยากเกินไป และไม่ต้องมีอักขระพิเศษ):`;
+        
+        วิเคราะห์และให้คำแนะนำเลย:`;
 
-        // 🌟 ใช้ชื่อโมเดลที่มีโควตาจริงในตารางของคุณ (gemini-2.5-flash หรือ gemini-3.5-flash)
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        // 🌟 เปลี่ยนมาใช้รุ่น 3.5 Flash Lite เพื่อรับโควตาฟรี 500 ครั้ง/วัน
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
