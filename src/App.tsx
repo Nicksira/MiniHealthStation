@@ -975,26 +975,26 @@ function App() {
 
               {/* 🤖 โซน AI สรุปผลอัตโนมัติ */}
               {(vitals.sysDia !== '---' || vitals.weight !== '---' || vitals.sugar !== '---') && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '15px', padding: '20px', background: 'linear-gradient(135deg, #f3e8ff, #e0e7ff)', borderRadius: '12px', borderLeft: '5px solid #8b5cf6', boxShadow: '0 4px 6px rgba(139, 92, 246, 0.15)' }}>
+                <div className="assessment-item" style={{ display: 'flex', alignItems: 'flex-start', gap: '15px', padding: '15px', background: '#f8fafc', borderRadius: '10px' }}>
                   
-                  <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 10px rgba(139, 92, 246, 0.4)' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {aiLoading ? (
-                      <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '24px', color: 'white' }}></i>
+                      <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '18px', color: 'white' }}></i>
                     ) : (
-                      <i className="fa-solid fa-robot" style={{ fontSize: '24px', color: 'white' }}></i>
+                      <i className="fa-solid fa-robot" style={{ fontSize: '18px', color: 'white' }}></i>
                     )}
                   </div>
                   
                   <div style={{ flex: 1 }}>
-                    <h4 style={{ margin: '0 0 8px 0', color: '#6d28d9', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h4 style={{ margin: '0 0 5px 0', color: '#475569', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       ✨ AI พยาบาลประเมินว่า:
                     </h4>
                     {aiLoading ? (
-                      <p style={{ margin: 0, color: '#64748b', fontSize: '16px', fontStyle: 'italic', animation: 'pulse 1.5s infinite' }}>
-                        กำลังวิเคราะห์ข้อมูลสุขภาพของคุณ กรุณารอสักครู่...
+                      <p style={{ margin: 0, color: '#64748b', fontSize: '15px', fontStyle: 'italic', animation: 'pulse 1.5s infinite' }}>
+                        กำลังวิเคราะห์ข้อมูลสุขภาพอย่างละเอียด...
                       </p>
                     ) : (
-                      <p style={{ margin: 0, color: '#334155', fontSize: '16px', lineHeight: '1.6', fontWeight: '500' }}>
+                      <p style={{ margin: 0, color: '#334155', fontSize: '15px', lineHeight: '1.5', fontWeight: 'bold' }}>
                         {aiResponse || "กรุณาวัดค่าต่างๆ เพื่อให้ AI ประเมินผล"}
                       </p>
                     )}

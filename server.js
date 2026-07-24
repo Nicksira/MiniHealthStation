@@ -243,7 +243,7 @@ app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
     const { vitals } = req.body;
     
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-3.6-pro" });
         // เขียน Prompt บังคับให้ AI พูดเหมือนพยาบาล
         const prompt = `
         คุณคือ "พยาบาลเอไอ ประจำ รพ.สต.ทับพริก" หน้าที่ของคุณคืออ่านค่าสุขภาพแล้วให้คำแนะนำแบบสั้นๆ เข้าใจง่าย กระชับ ไม่เกิน 3 ประโยค เป็นกันเองและห่วงใย
