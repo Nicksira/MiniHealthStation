@@ -233,7 +233,7 @@ app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
 // ==========================================
 // 🎯 API 5: ระบบ AI พยาบาลอัจฉริยะ (Smart Triage + JSON Output)
 // ==========================================
-const GEMINI_API_KEY = 'AIzaSyDvSnOr12Z9J2wd8wpPjtv5qOQ3laHpGaY'; 
+const GEMINI_API_KEY = ''; 
 
 app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
     const { vitals } = req.body;
@@ -258,31 +258,34 @@ app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
         - น้ำหนัก: ${vitals.weight} kg
         `;
 
-        // ใช้โมเดล 3.5 Flash Lite เพื่อโควตา 500 ครั้ง/วัน
+        // 🌟 บังคับใช้รุ่น 3.5 Flash Lite และใช้ method: 'POST' พร้อมส่ง body ให้ถูกต้อง
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
-            method: 'POST',
+            method: 'POST', // ต้องเป็น POST เสมอ
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                // บังคับให้ AI ตอบกลับมาเป็น JSON เสมอ (Enterprise Feature)
                 generationConfig: { responseMimeType: "application/json" }
             })
         });
 
         const data = await response.json();
 
+        // 🌟 เพิ่มจุดเช็ก Error จาก Google ตรงนี้ชัดๆ
+        if (!response.ok) {
+            console.error("❌ Google API Error Response:", JSON.stringify(data, null, 2));
+            throw new Error(data.error?.message || "Google API Rejected Request");
+        }
+
         if (data.candidates && data.candidates.length > 0) {
-            // ถอดรหัส JSON ที่ AI ส่งกลับมา
             const aiResult = JSON.parse(data.candidates[0].content.parts[0].text);
             
-            console.log(`✅ AI Triage [${aiResult.color.toUpperCase()}]:`, aiResult.message);
             return res.status(200).json({ 
                 success: true, 
                 message: aiResult.message,
-                triageColor: aiResult.color // ส่งสีกลับไปโชว์ที่หน้าจอ/หน้า Admin
+                triageColor: aiResult.color 
             });
         } else {
-            throw new Error("Invalid response from AI");
+            throw new Error("Invalid response format from Google");
         }
 
     } catch (error) {
@@ -290,8 +293,48 @@ app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
         return res.status(200).json({ 
             success: true, 
             message: "ค่าความดันของคนไข้ถูกบันทึกแล้วค่ะ หากรู้สึกปวดศีรษะให้แจ้งเจ้าหน้าที่ทันทีนะคะ",
-            triageColor: "yellow" // กรณี API ล่ม ให้เฝ้าระวังไว้ก่อน
+            triageColor: "yellow" 
         });
+    }
+});
+
+// 🎙️ Endpoint สำหรับแปลงข้อความ เป็นเสียงพูดด้วย Google TTS ( Achernar )
+app.post('/jhcis-api/tts', checkApiKey, async (req, res) => {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ success: false, message: 'No text provided' });
+
+    try {
+        const response = await fetch(`https://texttospeech.googleapis.com/v1beta1/text:synthesize?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                input: { text },
+                voice: {
+                    languageCode: "th-th",
+                    modelName: "gemini-3.1-flash-tts-preview",
+                    name: "Achernar"
+                },
+                audioConfig: {
+                    audioEncoding: "LINEAR16",
+                    pitch: 0,
+                    speakingRate: 1
+                }
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || 'Google TTS API Error');
+        }
+
+        return res.status(200).json({ 
+            success: true, 
+            audioContent: data.audioContent 
+        });
+
+    } catch (error) {
+        console.error("❌ TTS Error Detail:", error.message);
+        return res.status(500).json({ success: false, message: error.message });
     }
 });
 

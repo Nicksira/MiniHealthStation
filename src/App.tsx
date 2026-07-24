@@ -689,38 +689,38 @@ function App() {
     }
   };
 
-  // ==========================================
-  // 🎙️ ฟังก์ชันพากย์เสียง (อัปเกรดเสียงให้เป็นธรรมชาติ ไม่เป็นหุ่นยนต์)
-  // ==========================================
-  const speak = (text: string) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel(); // ล้างคิวเสียงเก่าที่ค้างอยู่
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      
-      // ดึงรายการเสียงทั้งหมดที่มีในบราวเซอร์
-      const voices = window.speechSynthesis.getVoices();
-      
-      // 🌟 ล็อกเป้าหาเสียง "Google ไทย" (เสียงพยาบาลสาวธรรมชาติที่ต่อเน็ต)
-      // หรือเสียงคุณภาพสูงอื่นๆ ถ้าใช้ระบบปฏิบัติการอื่น
-      const thaiVoices = voices.filter(v => v.lang.includes('th'));
-      const premiumVoice = thaiVoices.find(v => v.name.includes('Google')) || 
-                           thaiVoices.find(v => v.name.includes('Narisa')) || // สำหรับฝั่ง Apple
-                           thaiVoices.find(v => v.name.includes('Kanya'));
-
-      if (premiumVoice) {
-        utterance.voice = premiumVoice; // บังคับใช้เสียงธรรมชาติ
-      } else if (thaiVoices.length > 0) {
-        utterance.voice = thaiVoices[0]; // สำรองกรณีไม่มีเน็ต
+  // 🟢 Helper แปลง Base64 เป็น Audio Blob สำหรับเล่นเสียง
+  const b64toBlob = (b64Data: string, contentType = 'audio/wav', sliceSize = 512) => {
+    const byteCharacters = atob(b64Data);
+    const byteArrays = [];
+    for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+      const slice = byteCharacters.slice(offset, offset + sliceSize);
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
       }
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
+    }
+    return new Blob(byteArrays, { type: contentType });
+  };
 
-      utterance.lang = 'th-TH';
-      
-      // 🎛️ ปรับแต่งความถี่และจังหวะ (Voice Tuning)
-      utterance.rate = 0.85;  // ลดความเร็วลงนิดนึง (0.85) ให้ผู้สูงอายุฟังชัดๆ ไม่รวบคำ
-      utterance.pitch = 1.15; // ปรับโทนเสียงให้สูงขึ้นนิดนึง (1.15) จะฟังดูนุ่มนวลและอ่อนหวานขึ้น
+  // 🎙️ ฟังก์ชันพากย์เสียงผ่าน Google TTS API (Achernar)
+  const speak = async (text: string) => {
+    if (!text) return;
+    try {
+      const response = await axios.post(`${API_BASE_URL}/jhcis-api/tts`, { text }, {
+        headers: { 'x-api-key': API_KEY }
+      });
 
-      window.speechSynthesis.speak(utterance);
+      if (response.data.success && response.data.audioContent) {
+        const audioBlob = b64toBlob(response.data.audioContent, 'audio/wav');
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.play().catch(e => console.log("Audio play blocked:", e));
+      }
+    } catch (error) {
+      console.error("ไม่สามารถสร้างเสียงพูดได้:", error);
     }
   };
 
