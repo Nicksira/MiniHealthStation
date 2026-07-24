@@ -11,6 +11,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [patientPhoto, setPatientPhoto] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  
   // 🟢 State สำหรับ Admin ลับ และระบบ Offline
   const [adminTab, setAdminTab] = useState<'settings' | 'data'>('settings');
   const [offlineQueue, setOfflineQueue] = useState<any[]>(JSON.parse(localStorage.getItem('offline_queue') || '[]'));
@@ -19,7 +20,6 @@ function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiResponse, setAiResponse] = useState('');
-  
 
   // 🟢 State สำหรับหน้าต่าง Modal ต่างๆ
   const [showTelemedModal, setShowTelemedModal] = useState(false);
@@ -40,7 +40,7 @@ function App() {
     switch(type) {
       case 'bp':
         title = 'วิธีวัดความดันโลหิต';
-        gifUrl = '/guide-bp.gif'; // 🌟 เตรียมไฟล์ GIF หรือรูปไปใส่ในโฟลเดอร์ public
+        gifUrl = '/guide-bp.gif';
         desc = 'สอดแขนเข้าไปในอุโมงค์ให้พอดีกับข้อพับ วางแขนราบบนโต๊ะ นั่งหลังตรง แล้วอยู่นิ่งๆ นะคะ';
         action = connectBluetoothBP;
         break;
@@ -71,12 +71,11 @@ function App() {
     }
 
     setGuideModal({ show: true, type, title, gifUrl, desc, action });
-    speak(desc); // 🎙️ สั่งให้ระบบพูดสอนวิธีใช้งานทันทีที่ Pop-up เด้งขึ้นมา!
+    speak(desc);
   };
 
   const handleStartDeviceConnection = async () => {
     if (guideModal.action) {
-      // ปิดหน้าต่าง Guide แล้วค่อยเรียกฟังก์ชันเชื่อมต่อ Bluetooth
       setGuideModal({ ...guideModal, show: false });
       await guideModal.action(); 
     }
@@ -96,12 +95,10 @@ function App() {
   const [isTestingMode, setIsTestingMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-
   // ==========================================
   // 🕵️‍♂️ ทางเข้าลับหน้า Admin (กดโลโก้ 5 ครั้ง)
   // ==========================================
   const [adminClicks, setAdminClicks] = useState(0);
-  const [showAdmin, setShowAdmin] = useState(false);
 
   const handleLogoClick = () => {
     setAdminClicks(prev => prev + 1);
@@ -109,7 +106,7 @@ function App() {
       setShowSettings(true);    
       setAdminTab('data');      
       setAdminClicks(0);
-      speak("เข้าสู่โหมดผู้ดูแลระบบ"); // 🌟 แก้จาก speakText เป็น speak
+      speak("เข้าสู่โหมดผู้ดูแลระบบ");
     }
   };
   
@@ -133,27 +130,22 @@ function App() {
     hospName: localStorage.getItem('config_hospName') || 'โรงพยาบาลส่งเสริมสุขภาพตำบลทับพริก [02506]'
   });
 
-
-  // 🛑 เติมบรรทัดนี้ลงไปครับ! สำคัญมาก เพื่อป้องกันหน้าจอขาว หรือปุ่มค้าง 🛑
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-
 
   const [vitals, setVitals] = useState({
     height: '---', weight: '---', waist: '---',
     bmi: '---', temp: '---', spo2: '---',
     sysDia: '---', pulse: '---', sugar: '---'
   });
+
   // 🧠 ให้ AI ทำงานอัตโนมัติ เมื่อมีการวัดค่าความดัน น้ำหนัก หรือน้ำตาลเสร็จสิ้น
   useEffect(() => {
-    // จะให้ AI ทำงาน ก็ต่อเมื่อมีค่าใดค่าหนึ่งที่ไม่ใช่ '---' (คือเริ่มวัดแล้ว)
     if (vitals.sysDia !== '---' || vitals.weight !== '---' || vitals.sugar !== '---') {
       const fetchAI = async () => {
         setAiLoading(true);
         try {
           const res = await axios.post(`${API_BASE_URL}/jhcis-api/ai-analyze`, { vitals }, { headers: { 'x-api-key': API_KEY } });
           setAiResponse(res.data.message);
-          
-          // ให้ AI พูดสรุปให้ฟังด้วย (ถ้าไม่อยากให้พูดออโต้ ลบบรรทัด speak นี้ออกได้ครับ)
           speak(res.data.message); 
         } catch (e) {
           setAiResponse("ไม่สามารถเชื่อมต่อระบบ AI ได้ในขณะนี้");
@@ -161,22 +153,20 @@ function App() {
         setAiLoading(false);
       };
       
-      // หน่วงเวลา 2 วินาทีหลังจากวัดค่าเสร็จ เพื่อให้คนไข้กรอกข้อมูลนิ่งก่อน แล้วค่อยยิง AI
       const timeoutId = setTimeout(() => {
         fetchAI();
       }, 2000); 
 
       return () => clearTimeout(timeoutId);
     }
-  }, [vitals.sysDia, vitals.weight, vitals.sugar]); // จับตาดู 3 ค่านี้ ถ้าเปลี่ยนให้ยิง AI
+  }, [vitals.sysDia, vitals.weight, vitals.sugar]);
 
   // 🚨 ระบบตรวจสอบความดันวิกฤตและเด้งแจ้งเตือนเต็มหน้าจอแบบอัตโนมัติ
   useEffect(() => {
     if (vitals.sysDia !== '---') {
       const [sys, dia] = vitals.sysDia.split('/').map(Number);
       if (sys >= 180 || dia >= 120) {
-        setShowEmergencyModal(true); // สั่งเปิด Modal สีแดงคลุมเต็มหน้าจอ
-        // สั่งให้ AI พูดเตือนฉุกเฉินทันที!
+        setShowEmergencyModal(true);
         speak('อันตราย ความดันโลหิตของคุณสูงถึงขั้นวิกฤต กรุณานั่งพัก และแจ้งเจ้าหน้าที่ทันทีค่ะ'); 
       } else {
         setShowEmergencyModal(false);
@@ -187,23 +177,17 @@ function App() {
   // 1. เพิ่ม State สำหรับเก็บรูปภาพคนไข้ (Base64)
   const [patientImage, setPatientImage] = useState<string | null>(null);
   
-
-  // 1. ฟังก์ชันดึงรูป ทะลวง Cache 100%
   const fetchPatientPhoto = async (cid: string) => {
     try {
       const timestamp = new Date().getTime();
-      // 🌟 เปลี่ยน URL ยิงไปที่ HTTPS หลัก
       const photoUrl = `${API_BASE_URL}/jhcis-api/photo/${cid}?t=${timestamp}`;
       
       const response = await fetch(photoUrl, {
         method: 'GET',
-        headers: {
-          'x-api-key': API_KEY
-        }
+        headers: { 'x-api-key': API_KEY }
       });
       
       if (response.ok) {
-        // 🛑 แก้ไข: รับข้อมูลเป็น JSON เพื่อดึงตัวแปร image ที่เป็น Base64 ออกมา
         const data = await response.json();
         if (data.success && data.image) {
           setPatientImage(`data:image/jpeg;base64,${data.image}`);
@@ -219,19 +203,16 @@ function App() {
     }
   };
 
-  // 2. ฟังก์ชันถ่ายรูป (พร้อมระบบบีบอัดภาพ God Tier และแจ้งเตือน)
   const handleCapturePhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      // 🌟 สร้าง Canvas เพื่อบีบอัดรูปภาพก่อนส่ง
       const img = new Image();
       img.src = reader.result as string;
       img.onload = async () => {
         const canvas = document.createElement('canvas');
-        // จำกัดความกว้างสูงสุดแค่ 600px (ประหยัดพื้นที่ Database JHCIS)
         const MAX_WIDTH = 600; 
         const scaleSize = MAX_WIDTH / img.width;
         canvas.width = MAX_WIDTH;
@@ -240,17 +221,14 @@ function App() {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
         
-        // แปลงรูปเป็น JPEG และลดคุณภาพลงเหลือ 70% (เหลือไม่กี่สิบ KB)
         const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-        
-        setPatientImage(compressedBase64); // โชว์รูปที่บีบอัดแล้วหน้าจอทันที
+        setPatientImage(compressedBase64); 
         
         const currentCid = patient?.cid;
         if (!currentCid) return;
 
         try {
           setIsUploadingPhoto(true);
-          // 🌟 เปลี่ยนจาก http://${config.host} เป็นโดเมน HTTPS หลักของระบบ
           const response = await fetch(`${API_BASE_URL}/jhcis-api/upload-photo`, {
             method: 'POST',
             headers: {
@@ -265,19 +243,18 @@ function App() {
 
           const data = await response.json();
           if (data.success) {
-            alert('📸 บันทึกรูปภาพลงฐานข้อมูลสำเร็จ!'); // แจ้งเตือนเมื่อสำเร็จชัวร์ๆ
+            alert('📸 บันทึกรูปภาพลงฐานข้อมูลสำเร็จ!');
           } else {
             alert(`❌ บันทึกรูปไม่สำเร็จ: ${data.message}`);
           }
         } catch (error: any) {
           console.error("อัปโหลดรูปไม่สำเร็จ:", error);
-          alert(`❌ การเชื่อมต่อล้มเหลว (เช็ก IP หรือ Chrome Flags): ${error.message}`);
+          alert(`❌ การเชื่อมต่อล้มเหลว: ${error.message}`);
         } finally {
           setIsUploadingPhoto(false);
         }
       };
     };
-    
     reader.readAsDataURL(file);
   };
 
@@ -307,10 +284,10 @@ function App() {
       setPatientPhoto(img_str);
 
       try {
-  const jhcisResponse = await axios.get(`https://api.miniheealthstation.com/jhcis-api/patient/${cid}`, {
-    headers: { 'x-api-key': API_KEY }, 
-    timeout: 4000 
-  });
+        const jhcisResponse = await axios.get(`${API_BASE_URL}/jhcis-api/patient/${cid}`, {
+          headers: { 'x-api-key': API_KEY }, 
+          timeout: 4000 
+        });
         if (jhcisResponse.data.success) {
           setPatient({ ...jhcisResponse.data.data, cid: cid }); 
         } else {
@@ -320,16 +297,13 @@ function App() {
         setPatient({ cid: cid, fname: cardData.fname, lname: cardData.lname, chronic: 'ไม่สามารถดึงข้อมูลโรคได้' });
       }
 
-      // ... โค้ดเดิม
       axios.post('http://localhost:8189/api/nhso-authen', {
           pid: cid, claimType: "PG0060001", mobile: "0000000000", correlationId: "MiniHealthStation-001"
       }).catch(() => {});
 
-      // 🛑 สั่งให้ระบบวิ่งไปดึงรูปจากฐานข้อมูล JHCIS ทันที
       await fetchPatientPhoto(cid); 
 
       setIsLoggedIn(true);
-      // ... โค้ดเดิม
     } catch (error) {
       alert("ระบบประมวลผลขัดข้อง");
     } finally {
@@ -337,7 +311,6 @@ function App() {
     }
   };
 
-// 🟢 ฟังก์ชันค้นหาประวัติจากการพิมพ์เลข 13 หลัก (ไม่มีบัตร)
   const processManualId = async () => {
     if (manualIdInput.length !== 13) {
       setManualIdError('กรุณากรอกเลขประจำตัวประชาชนให้ครบ 13 หลัก');
@@ -348,21 +321,16 @@ function App() {
     setManualIdError('');
     
     try {
-  const response = await axios.get(`https://api.miniheealthstation.com/jhcis-api/patient/${manualIdInput}`, { 
-    headers: { 'x-api-key': API_KEY }, 
-    timeout: 5000 
-  });
+      const response = await axios.get(`${API_BASE_URL}/jhcis-api/patient/${manualIdInput}`, { 
+        headers: { 'x-api-key': API_KEY }, 
+        timeout: 5000 
+      });
       
-      // ... โค้ดเดิม
       if (response.data.success) {
         setPatient({ ...response.data.data, cid: manualIdInput });
-        
-        // 🛑 สั่งให้ระบบวิ่งไปดึงรูปจากฐานข้อมูล JHCIS ทันที
         await fetchPatientPhoto(manualIdInput); 
-        
         setIsTestingMode(true); 
         setIsLoggedIn(true);
-      // ... โค้ดเดิม
         setShowManualIdModal(false); 
         setManualIdInput(''); 
       }
@@ -377,20 +345,11 @@ function App() {
     }
   };
 
-  const simulateTest = () => {
-    setIsTestingMode(true);
-    const mockData = { pid: "1279800022828", fname: "สิรภพ", lname: "แก้วทิพย์", image: "" };
-    processCardData(mockData);
-  };
-
   const handleLogout = () => {
     setIsLoggedIn(false);
     setPatient(null);
     setPatientPhoto(null);
-    
-    // 🛑 เพิ่มบรรทัดนี้! เพื่อเคลียร์รูปภาพที่ดึงจาก JHCIS/กล้องถ่ายรูป ไม่ให้ค้างไปถึงคนไข้คิวถัดไป
     setPatientImage(null); 
-    
     setIsTestingMode(false);
     setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---' });
   };
@@ -408,7 +367,6 @@ function App() {
     }
   };
 
-  // ดักจับการสอดบัตร
   useEffect(() => {
     let checkCardInterval: NodeJS.Timeout;
     if (!loading && !showSettings && !isSubmitting && !showManualIdModal) {
@@ -429,16 +387,12 @@ function App() {
     return () => clearInterval(checkCardInterval);
   }, [isLoggedIn, loading, showSettings, isTestingMode, isSubmitting, showManualIdModal]);
 
-  // 🟢 Bluetooth Functions (อัปเดตล็อกเป้าหมายชื่ออุปกรณ์ตามหน้างานจริง)
-  
   const connectBluetoothO2 = async () => {
     try {
-      // 🚀 ปลดล็อกชื่อ ค้นหาอุปกรณ์ Bluetooth ทุกตัวที่อยู่รอบๆ เพื่อดูว่ามันแผ่สัญญาณชื่ออะไรออกมา
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
         optionalServices: ['pulse_oximeter'] 
       });
-      
       const server = await device.gatt?.connect();
       const service = await server?.getPrimaryService('pulse_oximeter');
       const characteristic = await service?.getCharacteristic('plx_continuous_measurement');
@@ -457,7 +411,6 @@ function App() {
 
   const connectBluetoothWeight = async () => {
     try {
-      // ล็อกเป้าหมายชื่อ BodyA-1B
       const device = await navigator.bluetooth.requestDevice({ 
         filters: [{ namePrefix: 'BodyA' }], 
         optionalServices: ['weight_scale'] 
@@ -492,21 +445,13 @@ function App() {
       const service = await server?.getPrimaryService('health_thermometer');
       const characteristic = await service?.getCharacteristic('temperature_measurement');
       await characteristic?.startNotifications();
-      
       characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
         const value = event.target.value;
-        
-        // 🧠 ถอดรหัสอุณหภูมิมาตรฐานการแพทย์ (IEEE-11073 32-bit FLOAT)
-        // แยกตัวเลขหลัก (Mantissa) 3 ไบต์ และเลขยกกำลัง (Exponent) 1 ไบต์
         const mantissa = value.getUint8(1) | (value.getUint8(2) << 8) | (value.getUint8(3) << 16);
         const exponent = value.getInt8(4);
-        
-        // คำนวณค่าจริง: mantissa * (10 ^ exponent)
         const tempValue = (mantissa * Math.pow(10, exponent)).toFixed(1);
-        
         setVitals(prev => ({ ...prev, temp: tempValue.toString() }));
       });
-      
       alert('✅ เชื่อมต่อเครื่องวัดอุณหภูมิสำเร็จ!');
       updateDeviceName('temp', device.name || 'Yuwell Temp');
     } catch (error) { 
@@ -517,7 +462,6 @@ function App() {
 
   const connectBluetoothSugar = async () => {
     try {
-      // ล็อกเป้าหมายชื่อ Yuwell Glucose
       const device = await navigator.bluetooth.requestDevice({ 
         filters: [{ namePrefix: 'Yuwell Glucose' }], 
         optionalServices: ['glucose'] 
@@ -540,7 +484,6 @@ function App() {
 
   const connectBluetoothBP = async () => {
     try {
-      // ล็อกเป้าหมายชื่อ Yuwell BP-YE680B
       const device = await navigator.bluetooth.requestDevice({ 
         filters: [{ namePrefix: 'Yuwell BP' }], 
         optionalServices: ['blood_pressure'] 
@@ -610,22 +553,14 @@ function App() {
     setVitals(prev => {
       let finalValue = value;
 
-      // 🛑 โลจิกจัดการช่องความดันโลหิต (sysDia) แบบอัตโนมัติ
       if (field === 'sysDia') {
-        // 1. อนุญาตให้พิมพ์ได้เฉพาะตัวเลขและเครื่องหมาย / เท่านั้น
         finalValue = finalValue.replace(/[^\d/]/g, '');
-        
-        // 2. เช็คว่าคนไข้กำลัง "ลบข้อมูล" อยู่หรือไม่ (เพื่อไม่ให้ / เด้งกลับมาตอนกด Backspace)
         const isDeleting = prev.sysDia !== '---' && finalValue.length < prev.sysDia.length;
-        
         if (!isDeleting) {
-          // 3. ถ้าพิมพ์ตัวเลขครบ 3 หลักและยังไม่มี / ให้เติม / อัตโนมัติ
           if (finalValue.length === 3 && !finalValue.includes('/')) {
             finalValue += '/';
           }
         }
-        
-        // 4. ป้องกันการเผลอพิมพ์เครื่องหมาย / ซ้ำซ้อน (เช่น 120//80)
         if (finalValue.split('/').length > 2) {
           finalValue = prev.sysDia;
         }
@@ -633,7 +568,6 @@ function App() {
 
       const newVitals = { ...prev, [field]: finalValue };
 
-      // ส่วนคำนวณ BMI อัตโนมัติ (คงไว้เหมือนเดิม)
       if (field === 'height' || field === 'weight') {
         const h = parseFloat(field === 'height' ? finalValue : prev.height) / 100;
         const w = parseFloat(field === 'weight' ? finalValue : prev.weight);
@@ -661,7 +595,6 @@ function App() {
       cid: patient.cid,
       weight: vitals.weight === '' || vitals.weight === '---' ? 0 : parseFloat(vitals.weight),
       height: vitals.height === '' || vitals.height === '---' ? 0 : parseFloat(vitals.height),
-      // ... (ดึง vitals อื่นๆ ให้ครบเหมือนโค้ดเดิมของคุณ)
       sysDia: vitals.sysDia === '---' ? '' : vitals.sysDia, 
       pulse: vitals.pulse === '' || vitals.pulse === '---' ? 0 : parseInt(vitals.pulse),
     };
@@ -681,16 +614,15 @@ function App() {
         }, 3000);
       }
     } catch (error) {
-      // 🛑 OFFLINE FIRST: ถ้ายิง JHCIS ไม่เข้า (เน็ตหลุด/เซิร์ฟเวอร์ดับ) ให้เซฟลง Kiosk ทันที
       const savedOffline = JSON.parse(localStorage.getItem('offline_queue') || '[]');
       savedOffline.push({ ...payload, name: `${patient.fname} ${patient.lname}`, timestamp: new Date().toLocaleString('th-TH') });
       localStorage.setItem('offline_queue', JSON.stringify(savedOffline));
-      setOfflineQueue(savedOffline); // อัปเดตหน้า Admin
+      setOfflineQueue(savedOffline); 
 
       speak('การเชื่อมต่อขัดข้อง แต่ระบบได้บันทึกข้อมูลสำรองไว้ในเครื่องแล้วค่ะ ไม่ต้องกังวลนะคะ');
       setNotifyModal({ 
         show: true, 
-        isSuccess: true, // ให้เป็นสีเขียวเพราะเซฟลงเครื่องสำเร็จ
+        isSuccess: true, 
         title: 'บันทึกออฟไลน์สำเร็จ (เน็ตขัดข้อง)', 
         message: 'ระบบเก็บข้อมูลของท่านไว้ใน Kiosk อย่างปลอดภัยแล้ว เจ้าหน้าที่จะซิงค์เข้าระบบให้ภายหลังครับ' 
       });
@@ -703,7 +635,6 @@ function App() {
     }
   };
 
-  // 🟢 เก็บ Audio instance และ Cache เสียงไว้ในความจำเครื่อง (เล่นซ้ำปุ๊บ ออกปั๊บ ไม่ต้องรอ AI)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const audioCacheRef = useRef<{ [key: string]: string }>({});
 
@@ -722,7 +653,6 @@ function App() {
     return new Blob(byteArrays, { type: contentType });
   };
 
-  // 🎙️ ฟังก์ชันพากย์เสียงผ่าน Edge TTS (ฟรี ไม่ติดโควตา)
   const speak = async (text: string) => {
     if (!text) return;
 
@@ -740,19 +670,15 @@ function App() {
         });
 
         if (response.data.success && response.data.audioContent) {
-          // แปลง Base64 เป็น MP3 Blob
           const audioBlob = b64toBlob(response.data.audioContent, 'audio/mp3');
           audioUrl = URL.createObjectURL(audioBlob);
-          audioCacheRef.current[text] = audioUrl; // แคชไว้ใช้ซ้ำ
+          audioCacheRef.current[text] = audioUrl; 
         }
       }
 
       if (audioUrl) {
         const audio = new Audio(audioUrl);
-        
-        // 🚀 เร่งความเร็วเสียงตรงนี้ครับ (1.0 = ปกติ, 1.15 = เร็วขึ้น 15%, 1.25 = เร็วขึ้น 25%)
         audio.playbackRate = 1.15; 
-        
         currentAudioRef.current = audio;
         audio.play().catch(e => console.log("Audio play blocked:", e));
       }
@@ -761,7 +687,6 @@ function App() {
     }
   };
 
-  // 🌟 บังคับให้บราวเซอร์โหลดเสียงเตรียมไว้ล่วงหน้าตั้งแต่เปิดหน้าเว็บ
   useEffect(() => {
     const loadVoices = () => window.speechSynthesis.getVoices();
     loadVoices();
@@ -770,7 +695,6 @@ function App() {
     }
   }, []);
 
-  // ⏱️ ระบบรักษาความปลอดภัย Auto-Logout 10 นาที (600,000 ms)
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     
@@ -781,14 +705,13 @@ function App() {
           speak('หมดเวลาทำรายการ ระบบได้ล้างข้อมูลของคุณเพื่อความปลอดภัยแล้วค่ะ');
           handleLogout();
         }
-      }, 600000); // 10 นาทีเป๊ะ
+      }, 600000); 
     };
 
-    // ดักจับว่าคนไข้ยังจิ้มหน้าจออยู่ไหม
     window.addEventListener('mousemove', resetTimer);
     window.addEventListener('touchstart', resetTimer);
     window.addEventListener('keydown', resetTimer);
-    resetTimer(); // เริ่มนับเวลา
+    resetTimer(); 
 
     return () => {
       window.removeEventListener('mousemove', resetTimer);
@@ -841,18 +764,54 @@ function App() {
         <h1 className="aurora-text">Mini Health Station</h1>
         <p>{config.hospName}</p>
       </header>
-{showSettings ? (
+
+      {/* 🟢 ย้ายปุ่มกลับหน้าแรก มาไว้ตรงนี้ (นอกกล่อง main) ป้องกันบั๊ก Safari ซ่อนปุ่ม */}
+      {isLoggedIn && !showSettings && (
+        <button 
+          onClick={handleLogout}
+          style={{
+            position: 'absolute',
+            top: '25px',
+            left: '25px',
+            zIndex: 9999,
+            padding: '12px 24px',
+            backgroundColor: 'white',
+            color: '#0284c7',
+            border: 'none',
+            borderRadius: '50px',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.15)',
+            transition: 'all 0.2s ease-in-out'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)';
+            e.currentTarget.style.backgroundColor = '#f0f9ff';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.backgroundColor = 'white';
+          }}
+        >
+          <i className="fa-solid fa-chevron-left" style={{ fontSize: '16px' }}></i> กลับหน้าแรก
+        </button>
+      )}
+
+      {/* 🟢 การแบ่งหน้าจอหลัก (Settings / Home / Dashboard) 🟢 */}
+      {showSettings ? (
         <main className="dashboard-screen" style={{ textAlign: 'left', padding: '40px', flex: 1, overflowY: 'auto', paddingBottom: '15vh' }}>
           <div style={{ background: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', maxWidth: '600px', margin: '0 auto' }}>
             
-            {/* 🟢 ปุ่มสลับแท็บ Settings / Admin (แทรกตรงนี้) */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #EEE', paddingBottom: '10px' }}>
               <button onClick={() => setAdminTab('settings')} style={{ flex: 1, padding: '10px', background: adminTab === 'settings' ? '#007AFF' : '#f1f5f9', color: adminTab === 'settings' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>⚙️ ตั้งค่าระบบ</button>
               <button onClick={() => setAdminTab('data')} style={{ flex: 1, padding: '10px', background: adminTab === 'data' ? '#10b981' : '#f1f5f9', color: adminTab === 'data' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>📊 ข้อมูลค้างส่ง (Offline)</button>
             </div>
 
             {adminTab === 'settings' ? (
-              /* 🟢 แท็บ 1: ข้อมูลการตั้งค่าเดิมทั้งหมด */
               <>
                 <h2 style={{ color: '#007AFF', marginBottom: '20px', borderBottom: '2px solid #EEE', paddingBottom: '10px' }}> ตั้งค่าระบบ (Settings)</h2>
                 <div style={{ marginBottom: '15px' }}><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px' }}> เปลี่ยนรูปโลโก้หน่วยงาน</label><input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'block', width: '100%', padding: '10px', background: '#F2F2F7', borderRadius: '8px' }} /></div>
@@ -873,7 +832,6 @@ function App() {
                 </div>
               </>
             ) : (
-              /* 🟢 แท็บ 2: หน้าจอ Admin ลับ สำหรับดูข้อมูล Offline */
               <div>
                 <h3 style={{ color: '#10b981', marginTop: '0' }}>รายการคิวที่ค้างส่งเข้าระบบ JHCIS ({offlineQueue.length} รายการ)</h3>
                 <div style={{ maxHeight: '350px', overflowY: 'auto', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
@@ -897,7 +855,6 @@ function App() {
           </div>
         </main>
       ) : !isLoggedIn ? (
-        
         <main className="home-screen" style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
           <video key={customVideo} autoPlay loop playsInline style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0, opacity: 0.4 }}><source src={customVideo} type="video/mp4" /></video>
           
@@ -909,10 +866,7 @@ function App() {
             {loading ? 'กำลังดึงข้อมูลและรูปถ่าย...' : 'กรุณาสอดบัตรประชาชน เพื่อเข้ารับบริการ'}
           </div>
           
-          {/* 🟢 โซนปุ่มหน้าแรก (จัดเรียงแนวตั้งตามดีไซน์ใหม่) */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', position: 'relative', zIndex: 1, marginTop: '20px', width: '90%', maxWidth: '600px' }}>
-            
-            {/* 🎯 ปุ่มไม่มีบัตร (สไตล์แคปซูลยาว สีฟ้าน้ำทะเลตาม Reference) */}
             <button 
               onClick={() => { setShowManualIdModal(true); setManualIdInput(''); setManualIdError(''); }}
               style={{ 
@@ -940,46 +894,11 @@ function App() {
             >
               ไม่มีบัตรประชาชนแตะที่ปุ่มนี้
             </button>
-
           </div>
         </main>
-
       ) : (
         <main className="dashboard-screen" style={{ flex: 1, overflowY: 'auto', paddingBottom: '15vh' }}>
-          {/* 🟢 ปุ่มย้อนกลับ มุมซ้ายบน (Floating Button) */}
-          <button 
-            onClick={handleLogout}
-            style={{
-              position: 'fixed',
-              top: '25px',
-              left: '25px',
-              zIndex: 100,
-              padding: '12px 24px',
-              backgroundColor: 'white',
-              color: '#0284c7', // สีฟ้าคุมโทนกับปุ่มด้านล่าง
-              border: 'none',
-              borderRadius: '50px',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              boxShadow: '0 4px 15px rgba(0,0,0,0.08)', // เงาบางๆ ให้ปุ่มลอยขึ้นมา
-              transition: 'all 0.2s ease-in-out'
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.transform = 'scale(1.05)';
-              e.currentTarget.style.backgroundColor = '#f0f9ff';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = 'scale(1)';
-              e.currentTarget.style.backgroundColor = 'white';
-            }}
-          >
-            <i className="fa-solid fa-chevron-left" style={{ fontSize: '16px' }}></i> กลับหน้าแรก
-          </button>
-
+          
           <div className="patient-header-card">
             <h2>ยินดีต้อนรับ คุณ{patient?.fname || 'สิรภพ'} {patient?.lname || 'แก้วทิพย์'}</h2>
             <div className="realtime-clock">{formatThaiDateTime(currentTime)}</div>
@@ -987,10 +906,7 @@ function App() {
           </div>
           
           <div className="photo-container">
-            {/* 🌟 สร้าง Wrapper กรอบจำกัดพื้นที่ เพื่อล็อกปุ่มให้อยู่มุมขวาล่างของรูปเสมอ */}
             <div style={{ position: 'relative', display: 'inline-block' }}>
-              
-              {/* ระบบจะเช็คว่ามีรูปจาก JHCIS ไหม ถ้ามีให้แสดงรูปจริง ถ้าไม่มีให้แสดงไอคอนสีเทา */}
               {patientImage ? (
                 <img 
                   src={patientImage} 
@@ -1005,23 +921,22 @@ function App() {
                 </div>
               )}
 
-              {/* 🌟 ปุ่มกล้องแบบวงกลมมุมขวาล่าง (ใช้ FontAwesome) */}
               <label 
                 style={{
                   position: 'absolute',
-                  bottom: '-10px',  // ขยับลงมาเหลื่อมกรอบรูปล่างนิดนึง
-                  right: '-15px',   // ขยับไปทางขวาให้ลอยเด่นออกมา
+                  bottom: '-10px',
+                  right: '-15px',
                   width: '45px',
                   height: '45px',
-                  backgroundColor: '#2563eb', // สีฟ้า Enterprise
+                  backgroundColor: '#2563eb',
                   color: 'white',
-                  borderRadius: '50%',        // ทำให้เป็นวงกลม
+                  borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: isUploadingPhoto ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 10px rgba(0,0,0,0.25)', // เงาให้ปุ่มลอยขึ้นมา
-                  border: '3px solid white',  // ขอบขาวตัดกับรูปให้ดูพรีเมียม
+                  boxShadow: '0 4px 10px rgba(0,0,0,0.25)',
+                  border: '3px solid white',
                   transition: 'transform 0.2s ease, background-color 0.2s ease',
                   zIndex: 15
                 }}
@@ -1035,7 +950,6 @@ function App() {
                 }}
                 title="ถ่ายรูปใหม่"
               >
-                {/* ถ้ากำลังอัปโหลดให้หมุนๆ ถ้าปกติให้โชว์รูปกล้อง */}
                 {isUploadingPhoto ? (
                   <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '18px' }}></i>
                 ) : (
@@ -1120,7 +1034,6 @@ function App() {
               {(vitals.sysDia !== '---' || vitals.weight !== '---' || vitals.sugar !== '---') && (
                 <div className="assessment-item" style={{ display: 'flex', alignItems: 'flex-start', gap: '15px', padding: '15px', background: '#f8fafc', borderRadius: '10px' }}>
                   
-                  {/* ถอดวงกลมออก และปรับขนาดเป็น 32px ให้เท่ากับไอคอนอื่นๆ */}
                   {aiLoading ? (
                     <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '32px', color: 'rgb(116, 192, 252)', marginTop: '2px' }}></i>
                   ) : (
@@ -1155,38 +1068,36 @@ function App() {
               ))}
             </div>
 
-              
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '25px' }}>
-  <div style={{ display: 'flex', gap: '15px' }}>
-    {healthAnalysis.isEmergency && (
-      <a href="tel:1669" style={{ flex: 1, padding: '15px', backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textDecoration: 'none', boxShadow: '0 4px 6px rgba(239, 68, 68, 0.3)' }}>
-        <i className="fa-solid fa-truck-medical" style={{ fontSize: '24px' }}></i> โทรเรียก 1669 ทันที!
-      </a>
-    )}
-    
-    <button 
-      onClick={() => setShowTelemedModal(true)}
-      style={{ flex: 2, padding: '15px', backgroundColor: '#0284c7', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'transform 0.2s', boxShadow: '0 4px 6px rgba(2, 132, 199, 0.3)' }}
-      onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-      onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-    >
-      <i className="fa-solid fa-video" style={{ fontSize: '24px' }}></i> ปรึกษาแพทย์ออนไลน์ (Telemedicine)
-    </button>
-  </div>
+              <div style={{ display: 'flex', gap: '15px' }}>
+                {healthAnalysis.isEmergency && (
+                  <a href="tel:1669" style={{ flex: 1, padding: '15px', backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textDecoration: 'none', boxShadow: '0 4px 6px rgba(239, 68, 68, 0.3)' }}>
+                    <i className="fa-solid fa-truck-medical" style={{ fontSize: '24px' }}></i> โทรเรียก 1669 ทันที!
+                  </a>
+                )}
+                
+                <button 
+                  onClick={() => setShowTelemedModal(true)}
+                  style={{ flex: 2, padding: '15px', backgroundColor: '#0284c7', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'transform 0.2s', boxShadow: '0 4px 6px rgba(2, 132, 199, 0.3)' }}
+                  onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                  onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <i className="fa-solid fa-video" style={{ fontSize: '24px' }}></i> ปรึกษาแพทย์ออนไลน์ (Telemedicine)
+                </button>
+              </div>
 
-  <button 
-    onClick={sendToJHCISQueue}
-    style={{ width: '100%', padding: '18px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontSize: '20px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'transform 0.2s', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.3)' }}
-    onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-    onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-  >
-    <i className="fa-solid fa-server" style={{ fontSize: '24px' }}></i> บันทึกข้อมูลและจัดคิวลง JHCIS
-  </button>
-</div>
-</div>
-</main>
-)}
+              <button 
+                onClick={sendToJHCISQueue}
+                style={{ width: '100%', padding: '18px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontSize: '20px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'transform 0.2s', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.3)' }}
+                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <i className="fa-solid fa-server" style={{ fontSize: '24px' }}></i> บันทึกข้อมูลและจัดคิวลง JHCIS
+              </button>
+            </div>
+          </div>
+        </main>
+      )}
 
       {/* 🟢 Footer แบบทะลุคลิกได้ */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, width: '100%', height: '15vh', backgroundImage: "url('/footer.png')", backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 10, pointerEvents: 'none' }}></div>
@@ -1200,7 +1111,6 @@ function App() {
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgb(116, 192, 252)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
         </div>
       </div>
-
 
       {/* ======================= โซนหน้าต่าง Modal ทั้งหมด ======================= */}
 
@@ -1322,12 +1232,10 @@ function App() {
               ].map((item, idx) => (
                 <div key={idx} style={{ display: 'flex', alignItems: 'center', background: 'white', padding: '15px', borderRadius: '10px', marginBottom: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
                   
-                  {/* 🖼️ เปลี่ยนกรอบ Emoji เป็นกรอบรูปภาพจริง */}
                   <div style={{ marginRight: '15px', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', background: 'white', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
                     <img src={item.image} alt={item.label} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '4px' }} />
                   </div>
                   
-                  {/* ข้อความชื่ออุปกรณ์ */}
                   <div style={{ flex: 1, textAlign: 'left' }}>
                     <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#334155' }}>{item.label}</div>
                     <div style={{ fontSize: '12px', color: item.dev ? '#10b981' : '#94a3b8', marginTop: '3px' }}>
@@ -1335,7 +1243,6 @@ function App() {
                     </div>
                   </div>
                   
-                  {/* 🔘 สวิตช์เปิด-ปิด (Toggle Switch) สไตล์ iOS */}
                   <label style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'pointer', marginLeft: '10px' }}>
                     <input 
                       type="checkbox" 
@@ -1422,12 +1329,12 @@ function App() {
           <div style={{ background: 'white', borderRadius: '25px', padding: '35px', width: '90%', maxWidth: '550px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', position: 'relative' }}>
             
             <button onClick={() => { 
-  if (currentAudioRef.current) {
-    currentAudioRef.current.pause();
-    currentAudioRef.current = null;
-  }
-  setGuideModal({ ...guideModal, show: false }); 
-}} style={{ position: 'absolute', top: '15px', right: '20px', background: 'none', border: 'none', fontSize: '24px', color: '#94a3b8', cursor: 'pointer' }}>
+              if (currentAudioRef.current) {
+                currentAudioRef.current.pause();
+                currentAudioRef.current = null;
+              }
+              setGuideModal({ ...guideModal, show: false }); 
+            }} style={{ position: 'absolute', top: '15px', right: '20px', background: 'none', border: 'none', fontSize: '24px', color: '#94a3b8', cursor: 'pointer' }}>
               <i className="fa-solid fa-xmark"></i>
             </button>
 
@@ -1437,7 +1344,6 @@ function App() {
             
             {/* กรอบใส่ภาพเคลื่อนไหว (GIF) */}
             <div style={{ width: '100%', height: '280px', backgroundColor: '#f1f5f9', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', overflow: 'hidden', border: '2px dashed #cbd5e1' }}>
-              {/* ถ้ายังไม่มีไฟล์ GIF ระบบจะโชว์กรอบเทาๆ เขียนว่า รออัปโหลดรูป แทนชั่วคราวครับ */}
               <img 
                 src={guideModal.gifUrl} 
                 alt="คำแนะนำ" 

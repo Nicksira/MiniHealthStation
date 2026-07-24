@@ -234,7 +234,7 @@ app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
 // ==========================================
 // 🎯 API 5: ระบบ AI พยาบาลอัจฉริยะ (Smart Triage + JSON Output)
 // ==========================================
-const GEMINI_API_KEY = ''; 
+const GEMINI_API_KEY = 'AIzaSyA4oNzEL_gbIa3I8R0p51sewyzGjhrQqJw'; 
 
 app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
     const { vitals } = req.body;
