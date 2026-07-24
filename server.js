@@ -298,39 +298,84 @@ app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
     }
 });
 
-// 🎙️ Endpoint สำหรับแปลงข้อความ เป็นเสียงพูดด้วย Google TTS ( Achernar )
+// 🎙️ ฟังก์ชันสร้าง WAV Header สำหรับแปลงเสียง PCM ดิบๆ ให้เบราว์เซอร์เล่นได้
+function addWavHeader(pcmData, sampleRate = 24000, numChannels = 1, bitsPerSample = 16) {
+    const headerLength = 44;
+    const totalDataLen = pcmData.length;
+    const totalFileLen = totalDataLen + headerLength - 8;
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const blockAlign = numChannels * (bitsPerSample / 8);
+
+    const header = Buffer.alloc(headerLength);
+    header.write('RIFF', 0);
+    header.writeUInt32LE(totalFileLen, 4);
+    header.write('WAVE', 8);
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16); // SubChunk1Size (16 for PCM)
+    header.writeUInt16LE(1, 20);  // AudioFormat (1 for PCM)
+    header.writeUInt16LE(numChannels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(byteRate, 28);
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(bitsPerSample, 34);
+    header.write('data', 36);
+    header.writeUInt32LE(totalDataLen, 40);
+
+    return Buffer.concat([header, pcmData]);
+}
+
+// 🎙️ Endpoint สังเคราะห์เสียงพูดด้วย Gemini API (รุ่น gemini-3.1-flash-tts-preview / เสียง Achernar)
 app.post('/jhcis-api/tts', checkApiKey, async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ success: false, message: 'No text provided' });
 
     try {
-        const response = await fetch(`https://texttospeech.googleapis.com/v1beta1/text:synthesize?key=${GEMINI_API_KEY}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                input: { text },
-                voice: {
-                    languageCode: "th-th",
-                    modelName: "gemini-3.1-flash-tts-preview",
-                    name: "Achernar"
-                },
-                audioConfig: {
-                    audioEncoding: "LINEAR16",
-                    pitch: 0,
-                    speakingRate: 1
+                contents: [
+                    {
+                        parts: [
+                            { text: `อ่านข้อความนี้ออกเสียงเป็นเสียงพูดภาษาไทยด้วยน้ำเสียงนุ่มนวล เป็นธรรมชาติ สำหรับผู้สูงอายุ อ่านตามนี้เป๊ะๆ: ${text}` }
+                        ]
+                    }
+                ],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: {
+                                voiceName: "Achernar"
+                            }
+                        }
+                    }
                 }
             })
         });
 
         const data = await response.json();
         if (!response.ok) {
-            throw new Error(data.error?.message || 'Google TTS API Error');
+            console.error("❌ Gemini TTS API Error Response:", JSON.stringify(data, null, 2));
+            throw new Error(data.error?.message || 'Gemini TTS API Error');
         }
 
-        return res.status(200).json({ 
-            success: true, 
-            audioContent: data.audioContent 
-        });
+        const candidate = data.candidates?.[0];
+        const part = candidate?.content?.parts?.[0];
+
+        if (part && part.inlineData && part.inlineData.data) {
+            // แปลงข้อมูลเสียง PCM ดิบให้เป็น WAV Buffer ที่สมบูรณ์
+            const pcmBuffer = Buffer.from(part.inlineData.data, 'base64');
+            const wavBuffer = addWavHeader(pcmBuffer, 24000, 1, 16);
+            
+            return res.status(200).json({ 
+                success: true, 
+                audioContent: wavBuffer.toString('base64'),
+                mimeType: 'audio/wav'
+            });
+        } else {
+            throw new Error("No audio data returned from Gemini API");
+        }
 
     } catch (error) {
         console.error("❌ TTS Error Detail:", error.message);

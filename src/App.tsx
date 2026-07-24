@@ -689,7 +689,10 @@ function App() {
     }
   };
 
-  // 🟢 Helper แปลง Base64 เป็น Audio Blob สำหรับเล่นเสียง
+  // 🟢 เก็บ Audio instance และ Cache เสียงไว้ในความจำเครื่อง (เล่นซ้ำปุ๊บ ออกปั๊บ ไม่ต้องรอ AI)
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCacheRef = useRef<{ [key: string]: string }>({});
+
   const b64toBlob = (b64Data: string, contentType = 'audio/wav', sliceSize = 512) => {
     const byteCharacters = atob(b64Data);
     const byteArrays = [];
@@ -705,18 +708,35 @@ function App() {
     return new Blob(byteArrays, { type: contentType });
   };
 
-  // 🎙️ ฟังก์ชันพากย์เสียงผ่าน Google TTS API (Achernar)
+  // 🎙️ ฟังก์ชันพากย์เสียง (พร้อมระบบ Cache และระบบตัดเสียงเมื่อปิด)
   const speak = async (text: string) => {
     if (!text) return;
-    try {
-      const response = await axios.post(`${API_BASE_URL}/jhcis-api/tts`, { text }, {
-        headers: { 'x-api-key': API_KEY }
-      });
 
-      if (response.data.success && response.data.audioContent) {
-        const audioBlob = b64toBlob(response.data.audioContent, 'audio/wav');
-        const audioUrl = URL.createObjectURL(audioBlob);
+    // ถ้ามีเสียงเก่ากำลังเล่นอยู่ ให้หยุดทันที
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+
+    try {
+      let audioUrl = audioCacheRef.current[text];
+
+      // ถ้ายังไม่เคยเปิดข้อความนี้ ให้ขอจากเซิร์ฟเวอร์ (ครั้งแรกจะช้าหน่อย ครั้งต่อไปจะเร็วปรื๊ด)
+      if (!audioUrl) {
+        const response = await axios.post(`${API_BASE_URL}/jhcis-api/tts`, { text }, {
+          headers: { 'x-api-key': API_KEY }
+        });
+
+        if (response.data.success && response.data.audioContent) {
+          const audioBlob = b64toBlob(response.data.audioContent, 'audio/wav');
+          audioUrl = URL.createObjectURL(audioBlob);
+          audioCacheRef.current[text] = audioUrl; // บันทึกเก็บใส่แคชทันที
+        }
+      }
+
+      if (audioUrl) {
         const audio = new Audio(audioUrl);
+        currentAudioRef.current = audio;
         audio.play().catch(e => console.log("Audio play blocked:", e));
       }
     } catch (error) {
