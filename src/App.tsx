@@ -735,6 +735,10 @@ function App() {
 
       if (audioUrl) {
         const audio = new Audio(audioUrl);
+        
+        // 🚀 เร่งความเร็วเสียงตรงนี้ครับ (1.0 = ปกติ, 1.15 = เร็วขึ้น 15%, 1.25 = เร็วขึ้น 25%)
+        audio.playbackRate = 1.15; 
+        
         currentAudioRef.current = audio;
         audio.play().catch(e => console.log("Audio play blocked:", e));
       }

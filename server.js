@@ -4,7 +4,7 @@ import mysql from 'mysql2/promise';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { EdgeTTS } from 'node-edge-tts';
+import * as googleTTS from 'google-tts-api';
 
 // ตั้งค่า Path สำหรับเซฟรูปภาพ
 const __filename = fileURLToPath(import.meta.url);
@@ -300,30 +300,28 @@ app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
 });
 
 // ==========================================
-// 🎯 API 6: ระบบเสียงพูดพยาบาล (Edge TTS - ฟรี 100% ไม่ติดโควตา)
+// 🎯 API 6: ระบบเสียงพูด (Google TTS API - เสถียร 100% ฟรี ไม่ติดโควตา)
 // ==========================================
 app.post('/jhcis-api/tts', checkApiKey, async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ success: false, message: 'No text provided' });
 
     try {
-        // 🌟 ล็อกเป้าหมายเสียง "พยาบาลสาว เปรมวดี" (th-TH-PremwadeeNeural)
-        const tts = new EdgeTTS({
-            voice: 'th-TH-PremwadeeNeural',
-            lang: 'th-TH',
-            outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
+        // 🌟 ดึงเสียงจาก Google และแปลงเป็น Base64 ทันที (ไม่ต้องสร้างไฟล์ลงเครื่องให้เสี่ยง Error)
+        const audioBase64 = await googleTTS.getAudioBase64(text, {
+            lang: 'th',
+            slow: false,
+            host: 'https://translate.google.com',
         });
-
-        const audioBuffer = await tts.synthesizeBuffer(text);
 
         return res.status(200).json({ 
             success: true, 
-            audioContent: audioBuffer.toString('base64'),
-            mimeType: 'audio/mp3'
+            audioContent: audioBase64,
+            mimeType: 'audio/mp3' 
         });
 
     } catch (error) {
-        console.error("❌ Edge TTS Error:", error.message);
+        console.error("❌ Google TTS Error:", error.message);
         return res.status(500).json({ success: false, message: error.message });
     }
 });
