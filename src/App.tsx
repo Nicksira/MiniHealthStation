@@ -421,56 +421,42 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 ALLWELL Auto-Scanner ทำงาน! เปิดระบบดักฟังทุกท่อ...");
+      console.log("🚀 เชื่อมต่อสำเร็จ! ล็อคเป้าท่อส่งน้ำหนัก a621...");
 
       for (const char of characteristics || []) {
-        if (char.properties.notify || char.properties.indicate) {
+        if (char.uuid.includes('a621') && (char.properties.notify || char.properties.indicate)) {
           await char.startNotifications();
-          const pipeId = char.uuid.substring(4, 8);
           
-          // ตัวแปรจำค่าเก่า เพื่อกรองขยะ (Heartbeat) ทิ้ง
           let lastData = "";
 
           char.addEventListener('characteristicvaluechanged', (event: any) => {
             try {
               const rawData = new Uint8Array(event.target.value.buffer);
               
-              // ตัด byte สุดท้าย (Checksum) ออก เพื่อดูว่ามีข้อมูลน้ำหนักจริงๆ เปลี่ยนไหม
+              // ตัดไบต์สุดท้าย (Checksum) ออก เพื่อกรองข้อมูล Heartbeat ที่ซ้ำซากทิ้งไป
               const coreData = Array.from(rawData).slice(0, -1).join('-');
-              if (coreData === lastData) return; // ถ้าข้อมูลเหมือนเดิมเป๊ะ ข้ามเลย!
+              if (coreData === lastData) return; 
               lastData = coreData;
 
-              const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
-              console.log(`📡 [ท่อ ${pipeId}] ข้อมูลใหม่เข้า!: ${hexStr}`);
+              if (rawData.length >= 6) {
+                // 🎯 ดึงค่าน้ำหนักจากตำแหน่งที่ถูกต้อง 100% (Index 4 และ 5)
+                let rawWeight = (rawData[4] << 8) | rawData[5];
+                let weight = (rawWeight * 0.01).toFixed(1); 
+                
+                const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+                console.log(`📡 ข้อมูลเข้า: [ ${hexStr} ] -> น้ำหนักจริง: ${weight} kg`);
 
-              // 🎯 AI Auto-Scan: ค้นหาน้ำหนักในทุกตำแหน่งของแพ็กเก็ต (เริ่มจาก Index 2 เพื่อข้าม Header)
-              for (let i = 2; i < rawData.length - 1; i++) {
-                let wBig = (rawData[i] << 8) | rawData[i + 1];       // แบบเดินหน้า
-                let wLittle = (rawData[i + 1] << 8) | rawData[i];   // แบบถอยหลัง
-
-                const evaluateWeight = (val: number, endian: string) => {
-                  let kg1 = val * 0.01;
-                  let kg2 = val * 0.1;
-                  
-                  // ถ้าน้ำหนักตกอยู่ในช่วง 25 ถึง 200 กิโลกรัม (กันค่ามั่ว)
-                  if ((kg1 > 25 && kg1 < 200) || (kg2 > 25 && kg2 < 200)) {
-                    let finalKg = (kg1 > 25 && kg1 < 200) ? kg1.toFixed(2) : kg2.toFixed(1);
-                    console.log(`🎉 BINGO! เจอค่าน้ำหนักที่ Index ${i} (${endian}): ${finalKg} kg`);
-                    
-                    // ยิงค่าขึ้นหน้าจอ Kiosk ทันที!
-                    setVitals(prev => {
-                      const h = parseFloat(prev.height) / 100;
-                      return { 
-                        ...prev, 
-                        weight: parseFloat(finalKg).toFixed(1), 
-                        bmi: h > 0 ? (parseFloat(finalKg) / (h * h)).toFixed(2) : '---' 
-                      };
-                    });
-                  }
-                };
-
-                evaluateWeight(wBig, "เดินหน้า");
-                evaluateWeight(wLittle, "ถอยหลัง");
+                // อัปเดตขึ้นหน้าจอ Kiosk เฉพาะตอนที่น้ำหนักเกิน 5 กิโลกรัม
+                if (parseFloat(weight) > 5.0) {
+                  setVitals(prev => {
+                    const h = parseFloat(prev.height) / 100;
+                    return { 
+                      ...prev, 
+                      weight: weight.toString(), 
+                      bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+                    };
+                  });
+                }
               }
             } catch (err) {
               console.error("Parse Error:", err);
@@ -479,12 +465,12 @@ function App() {
         }
       }
       
-      alert(`✅ เชื่อมต่อเครื่องชั่ง ALLWELL สำเร็จ! ขึ้นไปชั่งได้เลยครับ`);
+      alert(`✅ เชื่อมต่อเครื่องชั่ง ALLWELL สำเร็จ! กรุณาขึ้นยืนชั่งได้เลยครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
       console.error("Weight Error:", error); 
-      alert('❌ เชื่อมต่อไม่สำเร็จ'); 
+      alert('❌ เชื่อมต่อไม่สำเร็จ หรืออุปกรณ์หลุด'); 
     }
   };
 
