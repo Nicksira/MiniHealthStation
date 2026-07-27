@@ -410,7 +410,7 @@ function App() {
   };
 
   const connectBluetoothWeight = async () => {
-    let memoryScraperInterval = null; 
+    let loopInterval: NodeJS.Timeout | null = null; 
 
     try {
       const device = await navigator.bluetooth.requestDevice({ 
@@ -423,17 +423,21 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🏥 [Health Tech Architect] ระบบ Hybrid BLE พร้อมทำงาน!");
+      console.log("🚀 [Phase 3] The Handshake Protocol (ปลดล็อคเครื่องชั่ง)");
 
-      // 🧠 ศูนย์กลางประมวลผลข้อมูล
-      const processWeightData = (rawData, sourceName) => {
+      // 🧠 ฟังก์ชันประมวลผล (เปิดรับทุกอย่างที่เครื่องชั่งคายออกมา)
+      const processWeightData = (rawData: Uint8Array, sourceName: string) => {
+        const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        
+        // 🖨️ ปริ้นข้อมูลทันทีที่มีการขยับ เพื่อเป็นหลักฐานว่าปลดล็อคสำเร็จ
+        console.log(`📥 [${sourceName}] Data: ${hexStr}`);
+
         if (rawData.length >= 6) {
           let rawWeight = (rawData[4] << 8) | rawData[5];
           let weight = (rawWeight * 0.01).toFixed(1); 
           
-          if (parseFloat(weight) > 5.0 && parseFloat(weight) < 250.0) {
-            console.log(`🎯 [BINGO!] ดึงข้อมูลจาก ${sourceName} -> น้ำหนักจริง: ${weight} kg`);
-            
+          if (parseFloat(weight) > 2.0 && parseFloat(weight) < 250.0) {
+            console.log(`🎯 [SUCCESS] น้ำหนักที่ดึงได้: ${weight} kg`);
             setVitals(prev => {
               if (prev.weight === weight.toString()) return prev;
               const h = parseFloat(prev.height) / 100;
@@ -448,61 +452,76 @@ function App() {
       };
 
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
-      const readPipes = characteristics?.filter(c => c.properties.read) || [];
+      const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
 
       // ==========================================
-      // Engine 1: Passive Listener (ดักฟังปกติ)
+      // 🎧 1. เปิดท่อรับฟัง (Notify)
       // ==========================================
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
-          const pipeId = char.uuid.substring(4, 8);
-          console.log(`🎧 [Engine 1] เปิดระบบดักฟังท่อ: ${pipeId}`);
-          
-          char.addEventListener('characteristicvaluechanged', (event) => {
+          char.addEventListener('characteristicvaluechanged', (event: any) => {
             const rawData = new Uint8Array(event.target.value.buffer);
-            processWeightData(rawData, `NOTIFY-${pipeId}`);
+            processWeightData(rawData, `NOTIFY-${char.uuid.substring(4, 8)}`);
           });
-        } catch (e) {
-          console.warn(`⚠️ ข้ามการดักฟังท่อที่ไม่อนุญาต`);
+        } catch (e) {}
+      }
+
+      // ==========================================
+      // 🔑 2. ยิงรหัสปลดล็อค (The Magic Packets)
+      // ==========================================
+      // นี่คือรหัสลับที่ใช้ปลุกบอร์ด OEM (รวมถึง ALLWELL)
+      const wakeUpCommands = [
+        new Uint8Array([0xFD, 0x37]),  // รหัสปลุกมาตรฐาน
+        new Uint8Array([0x00, 0x00]),  // Null packet
+        new Uint8Array([0x03, 0x00]),  // Ping
+        new Uint8Array([0x10, 0x00, 0x00, 0x00]) // Broadcast Request
+      ];
+
+      for (const char of writePipes) {
+        const pipeId = char.uuid.substring(4, 8);
+        console.log(`🔓 กำลังยิงรหัสปลดล็อคไปที่ท่อ: ${pipeId}`);
+        for (const cmd of wakeUpCommands) {
+           try {
+             if (char.properties.writeWithoutResponse) {
+               await char.writeValueWithoutResponse(cmd);
+             } else {
+               await char.writeValue(cmd);
+             }
+           } catch(e) { }
         }
       }
 
       // ==========================================
-      // Engine 2: Active Memory Scraper (งัดข้อมูลจากหน่วยความจำ)
+      // 💓 3. ระบบ Heartbeat รักษาการเชื่อมต่อ
       // ==========================================
-      if (readPipes.length > 0) {
-        console.log(`⏱️ [Engine 2] เปิดระบบดึงข้อมูลอัตโนมัติจากท่อ READ (a640/a641)...`);
-        
-        // สั่งให้ดึงข้อมูลทุกๆ 1 วินาที
-        memoryScraperInterval = setInterval(async () => {
-          for (const char of readPipes) {
+      // เล็งไปที่ท่อ a623 หรือ a622 เป็นหลัก
+      const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
+      if (mainWritePipe) {
+         console.log(`💓 เปิดระบบ Heartbeat ป้องกันเครื่องหลับ ผ่านท่อ ${mainWritePipe.uuid.substring(4, 8)}`);
+         loopInterval = setInterval(async () => {
             try {
-              const value = await char.readValue();
-              const rawData = new Uint8Array(value.buffer);
-              if (rawData.length > 0) {
-                processWeightData(rawData, `READ-${char.uuid.substring(4, 8)}`);
+              const ping = new Uint8Array([0x00]); // ส่งรหัสว่างไปทักทาย
+              if (mainWritePipe.properties.writeWithoutResponse) {
+                await mainWritePipe.writeValueWithoutResponse(ping);
+              } else {
+                await mainWritePipe.writeValue(ping);
               }
-            } catch (e) {
-              // ซ่อน Error ท่อที่ถูกล็อคไม่ให้รก Console
-            }
-          }
-        }, 1000); 
+            } catch(e) {}
+         }, 1500); // ยิงทุก 1.5 วินาที
       }
 
-      // จัดการเคลียร์การดึงข้อมูลเมื่อสายหลุด
       device.addEventListener('gattserverdisconnected', () => {
-        if (memoryScraperInterval) clearInterval(memoryScraperInterval);
+        if (loopInterval) clearInterval(loopInterval);
         console.log("❌ อุปกรณ์ตัดการเชื่อมต่อ");
       });
 
-      alert(`✅ ระบบพร้อม 100%! เชื่อมต่อ ALLWELL สำเร็จ`);
+      alert(`✅ เชื่อมต่อและยิงรหัสปลดล็อคสำเร็จ!`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
-      if (memoryScraperInterval) clearInterval(memoryScraperInterval);
+      if (loopInterval) clearInterval(loopInterval);
       console.error("BLE Error:", error); 
-      alert('❌ การเชื่อมต่อล้มเหลว หรืออุปกรณ์ถูกแย่งสัญญาณ'); 
     }
   };
 
