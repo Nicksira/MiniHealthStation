@@ -421,56 +421,41 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 เชื่อมต่อสำเร็จ! ล็อคเป้าท่อส่งน้ำหนัก a621...");
+      console.log("🛠️ [Architect Mode] X-Ray Scanning ALLWELL Architecture...");
 
+      // สแกนทุกท่อเพื่อดูว่าท่อไหนรองรับคำสั่ง Write
       for (const char of characteristics || []) {
-        if (char.uuid.includes('a621') && (char.properties.notify || char.properties.indicate)) {
-          await char.startNotifications();
-          
-          let lastData = "";
+        const pipeId = char.uuid.substring(4, 8);
+        const props = [];
+        
+        if (char.properties.read) props.push("READ (อ่าน)");
+        if (char.properties.write) props.push("WRITE (เขียนคำสั่ง)");
+        if (char.properties.writeWithoutResponse) props.push("WRITE_NO_RESP");
+        if (char.properties.notify) props.push("NOTIFY (ดักฟัง)");
+        if (char.properties.indicate) props.push("INDICATE");
 
-          char.addEventListener('characteristicvaluechanged', (event: any) => {
-            try {
+        console.log(`📡 ท่อ [${pipeId}] รองรับสิทธิ์: ${props.join(", ")}`);
+
+        // ถ้าดักฟังได้ ก็เปิดดักฟังไว้เผื่อฟลุค
+        if (char.properties.notify || char.properties.indicate) {
+          try {
+            await char.startNotifications();
+            char.addEventListener('characteristicvaluechanged', (event: any) => {
               const rawData = new Uint8Array(event.target.value.buffer);
-              
-              // ตัดไบต์สุดท้าย (Checksum) ออก เพื่อกรองข้อมูล Heartbeat ที่ซ้ำซากทิ้งไป
-              const coreData = Array.from(rawData).slice(0, -1).join('-');
-              if (coreData === lastData) return; 
-              lastData = coreData;
-
-              if (rawData.length >= 6) {
-                // 🎯 ดึงค่าน้ำหนักจากตำแหน่งที่ถูกต้อง 100% (Index 4 และ 5)
-                let rawWeight = (rawData[4] << 8) | rawData[5];
-                let weight = (rawWeight * 0.01).toFixed(1); 
-                
-                const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
-                console.log(`📡 ข้อมูลเข้า: [ ${hexStr} ] -> น้ำหนักจริง: ${weight} kg`);
-
-                // อัปเดตขึ้นหน้าจอ Kiosk เฉพาะตอนที่น้ำหนักเกิน 5 กิโลกรัม
-                if (parseFloat(weight) > 5.0) {
-                  setVitals(prev => {
-                    const h = parseFloat(prev.height) / 100;
-                    return { 
-                      ...prev, 
-                      weight: weight.toString(), 
-                      bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
-                    };
-                  });
-                }
-              }
-            } catch (err) {
-              console.error("Parse Error:", err);
-            }
-          });
+              const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+              console.log(`📥 [ท่อ ${pipeId} ส่งข้อมูลมา]: ${hexStr}`);
+            });
+          } catch(e) {
+            console.log(`⚠️ ไม่สามารถเปิดดักฟังท่อ ${pipeId} ได้`);
+          }
         }
       }
       
-      alert(`✅ เชื่อมต่อเครื่องชั่ง ALLWELL สำเร็จ! กรุณาขึ้นยืนชั่งได้เลยครับ`);
+      alert(`✅ สแกนระบบสำเร็จ กรุณาดูในหน้าต่าง F12 ครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
-      console.error("Weight Error:", error); 
-      alert('❌ เชื่อมต่อไม่สำเร็จ หรืออุปกรณ์หลุด'); 
+      console.error("BLE Critical Error:", error); 
     }
   };
 
