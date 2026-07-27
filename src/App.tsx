@@ -413,92 +413,50 @@ function App() {
     let loopInterval: NodeJS.Timeout | null = null; 
 
     try {
-      // 🚀 ปรับการขอสิทธิ์ให้รองรับทั้ง OEM และ มาตรฐานการแพทย์สากล
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
-        optionalServices: [0xA602, 'weight_scale'] 
+        optionalServices: [0xA602] 
       });
       
       const server = await device.gatt?.connect();
-      console.clear();
-      console.log("🏥 [Health Tech Architect] เริ่มต้นระบบ Dual-Core Protocol...");
-
-      // ==========================================
-      // 🎯 แผน A: โปรโตคอลมาตรฐานการแพทย์สากล (IEEE 11073)
-      // ==========================================
-      try {
-        const standardService = await server?.getPrimaryService('weight_scale');
-        const weightChar = await standardService?.getCharacteristic('weight_measurement');
-        
-        if (weightChar) {
-          console.log("✅ ตรวจพบมาตรฐานการแพทย์สากล (Weight Scale Service)");
-          await weightChar.startNotifications();
-          
-          weightChar.addEventListener('characteristicvaluechanged', (event: any) => {
-            const data = new DataView(event.target.value.buffer);
-            const flags = data.getUint8(0);
-            const weightRaw = data.getUint16(1, true); // Little Endian
-            
-            // ถอดรหัสตามมาตรฐานโลก (0 = kg, 1 = lbs) สเกลคือ 0.005 kg ต่อหน่วย
-            let weight = ((flags & 0x01) === 0) ? (weightRaw * 0.005) : ((weightRaw * 0.01) * 0.453592);
-            
-            if (weight > 5.0) {
-              console.log(`⚖️ [STANDARD] ค่าน้ำหนักจริง: ${weight.toFixed(2)} kg`);
-              setVitals(prev => {
-                const h = parseFloat(prev.height) / 100;
-                return { ...prev, weight: weight.toFixed(2), bmi: h > 0 ? (weight / (h * h)).toFixed(2) : '---' };
-              });
-            }
-          });
-          
-          alert(`✅ เชื่อมต่อ ALLWELL (Medical Mode) สำเร็จ! ขึ้นชั่งได้เลยครับ`);
-          updateDeviceName('weight', device.name || 'ALLWELL Medical');
-          return; // จบการทำงานแบบสวยงาม ไม่ต้องไปแฮ็ก A602
-        }
-      } catch (e) {
-        console.log("⚠️ ไม่รองรับโหมดสากล สลับไปใช้ระบบเจาะเกราะ OEM A602...");
-      }
-
-      // ==========================================
-      // 🎯 แผน B: ระบบเจาะเกราะ OEM A602 (อัปเกรด AI ป้องกันข้อมูลขยะ)
-      // ==========================================
       const service = await server?.getPrimaryService(0xA602);
       const characteristics = await service?.getCharacteristics();
 
+      console.clear();
+      console.log("🚀 [Sniper Mode] ล็อคเป้าดึงน้ำหนักที่แท้จริง ทำงาน!");
+
+      // 🧠 ฟังก์ชันสไนเปอร์: เจาะเฉพาะจุดที่เก็บน้ำหนัก
       const processWeightData = (rawData: Uint8Array) => {
-        const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        if (rawData.length < 6) return;
 
-        // 🚨 กฎเหล็ก: บล็อกแพ็กเก็ตประวัติเก่า (10 11) และแพ็กเก็ตขยะ (00 00) ห้ามเข้ามายุ่งเด็ดขาด!
-        if (rawData[0] === 0x10 && rawData[1] === 0x11) return; 
-        if (hexStr.includes("00 00 00 00 00 00 00 00")) return;
+        // 🚨 เช็คว่าต้องเป็นแพ็กเก็ต Live Data (หัว 10 0A) เท่านั้น ถึงจะยอมทำงาน
+        if (rawData[0] === 0x10 && rawData[1] === 0x0a) {
+          
+          // 🎯 ดึงน้ำหนักจาก Byte 4 และ 5 (ข้าม Byte 0,1 ที่เคยทำจอเพี้ยนเป็น 41.06)
+          let rawWeight = (rawData[4] << 8) | rawData[5];
+          let weight = (rawWeight * 0.01).toFixed(2); 
 
-        console.log(`📦 [LIVE DATA] ตรวจพบข้อมูล: ${hexStr}`);
-
-        let foundWeight: string | null = null;
-        for (let i = 0; i < rawData.length - 1; i++) {
-          let valBig = (rawData[i] << 8) | rawData[i + 1];
-          let kgBig = (valBig * 0.01).toFixed(2);
-          // ล็อกสเปกน้ำหนักต้องสมจริง
-          if (parseFloat(kgBig) > 30.0 && parseFloat(kgBig) < 150.0) foundWeight = kgBig;
-
-          let valLittle = (rawData[i + 1] << 8) | rawData[i];
-          let kgLittle = (valLittle * 0.01).toFixed(2);
-          if (parseFloat(kgLittle) > 30.0 && parseFloat(kgLittle) < 150.0 && kgLittle !== kgBig) foundWeight = kgLittle;
-        }
-
-        if (foundWeight) {
-           console.log(`🔥 [SUCCESS] สกัดน้ำหนัก Live สำเร็จ: ${foundWeight} kg`);
-           setVitals(prev => {
-              if (prev.weight === foundWeight?.toString()) return prev; 
+          // คัดกรองตัวเลข ถ้าน้ำหนักเกิน 5 กิโลกรัม ให้แสดงผลเลย!
+          if (parseFloat(weight) > 5.0 && parseFloat(weight) < 250.0) {
+            console.log(`🎯 [BINGO!] ล็อคเป้าน้ำหนักจริง: ${weight} kg`);
+            
+            setVitals(prev => {
+              if (prev.weight === weight.toString()) return prev; // กันจอกระพริบ
               const h = parseFloat(prev.height) / 100;
-              return { ...prev, weight: foundWeight.toString(), bmi: h > 0 ? (parseFloat(foundWeight) / (h * h)).toFixed(2) : '---' };
-           });
+              return { 
+                ...prev, 
+                weight: weight.toString(), 
+                bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+              };
+            });
+          }
         }
       };
 
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
       const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
 
+      // 🎧 1. เปิดรับข้อมูล
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
@@ -508,7 +466,7 @@ function App() {
         } catch (e) {}
       }
 
-      // เปลี่ยนรหัสปลุก เป็นคำสั่ง Bind ธรรมดา เพื่อไม่ให้มันคาย History ออกมา
+      // 🔑 2. ยิงรหัสเปิดท่อข้อมูล (ลบรหัสขอประวัติเก่าออก จะได้ไม่มีขยะ)
       const wakeUpCommands = [
         new Uint8Array([0xFD, 0x37]),  
         new Uint8Array([0x01, 0x00])   
@@ -523,11 +481,12 @@ function App() {
         }
       }
 
+      // 💓 3. ระบบ Heartbeat รักษาการเชื่อมต่อไม่ให้เครื่องหลับ
       const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
       if (mainWritePipe) {
          loopInterval = setInterval(async () => {
             try {
-              const ping = new Uint8Array([0x02, 0x00]); // ACK packet ดึงข้อมูลปัจจุบัน
+              const ping = new Uint8Array([0x00]); 
               if (mainWritePipe.properties.writeWithoutResponse) await mainWritePipe.writeValueWithoutResponse(ping);
               else await mainWritePipe.writeValue(ping);
             } catch(e) {}
@@ -536,9 +495,10 @@ function App() {
 
       device.addEventListener('gattserverdisconnected', () => {
         if (loopInterval) clearInterval(loopInterval);
+        console.log("❌ อุปกรณ์ตัดสาย");
       });
 
-      alert(`✅ ระบบเจาะเกราะพร้อมทำงาน! กรุณาชั่งน้ำหนัก`);
+      alert(`✅ ระบบล็อคเป้าทำงาน! กรุณาก้าวขึ้นชั่งได้เลยครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
