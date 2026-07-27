@@ -411,27 +411,50 @@ function App() {
 
   const connectBluetoothWeight = async () => {
     try {
+      // 1. เปิดโหมด Universal Scan (รับทุกยี่ห้อ ไม่ล็อคชื่อ)
       const device = await navigator.bluetooth.requestDevice({ 
-        filters: [{ namePrefix: 'BodyA' }], 
-        optionalServices: ['weight_scale'] 
+        acceptAllDevices: true, 
+        optionalServices: ['weight_scale'] // เข้าถึง Service มาตรฐาน 0x181D
       });
+      
       const server = await device.gatt?.connect();
       const service = await server?.getPrimaryService('weight_scale');
-      const characteristic = await service?.getCharacteristic('weight_measurement');
+      const characteristic = await service?.getCharacteristic('weight_measurement'); // เข้าถึง Characteristic มาตรฐาน 0x2A9D
+      
       await characteristic?.startNotifications();
+      
       characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
-        const value = event.target.value;
-        const weight = (value.getUint16(1, true) * 0.005).toFixed(1); 
-        setVitals(prev => {
-          const h = parseFloat(prev.height) / 100;
-          return { ...prev, weight: weight.toString(), bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' };
-        });
+        try {
+          const value = event.target.value;
+          
+          // 2. ถอดรหัส Byte (Data Parsing) แบบ Little Endian
+          const rawWeight = value.getUint16(1, true); 
+          
+          // ⚠️ จุดสังเกตสำคัญ (Multiplier):
+          // เครื่องชั่งทั่วไปในท้องตลาดมักจะใช้ตัวคูณ 0.005 หรือ 0.01
+          // ถ้าน้ำหนักคนไข้ชั่งได้ 60kg แต่ในจอขึ้น 30kg แปลว่าต้องเปลี่ยนจาก 0.005 เป็น 0.01 ครับ
+          const weight = (rawWeight * 0.005).toFixed(1); 
+          
+          // 3. อัปเดต State พร้อมคำนวณ BMI อัตโนมัติทันทีที่น้ำหนักเข้า
+          setVitals(prev => {
+            const h = parseFloat(prev.height) / 100;
+            return { 
+              ...prev, 
+              weight: weight.toString(), 
+              bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+            };
+          });
+        } catch (err) {
+          console.error("Data Parsing Error: ข้อมูลขยะเข้ามา", err);
+        }
       });
-      alert('✅ เชื่อมต่อเครื่องชั่งน้ำหนักสำเร็จ!');
-      updateDeviceName('weight', device.name || 'BodyA Scale');
+      
+      alert(`✅ เชื่อมต่อเครื่องชั่ง ${device.name || 'Bluetooth Scale'} สำเร็จ!`);
+      updateDeviceName('weight', device.name || 'Bluetooth Scale');
+      
     } catch (error) { 
       console.error("Weight Error:", error); 
-      alert('❌ ยกเลิกหรืออุปกรณ์อาจใช้โปรโตคอลเฉพาะตัว'); 
+      alert('❌ ยกเลิก หรือ เครื่องชั่งยี่ห้อนี้อาจใช้โปรโตคอลพิเศษที่ไม่ได้มาตรฐาน'); 
     }
   };
 
