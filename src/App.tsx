@@ -423,52 +423,44 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 [Enterprise Mode] The Wall is Broken! (เจาะระบบเครื่องชั่งสำเร็จ)");
+      console.log("🚀 [Enterprise Mode] Precision Weight Extractor ทำงาน!");
 
-      // 🧠 The Ultimate Parser (ถอดรหัสแพ็กเก็ต 19-Byte ของ ALLWELL)
+      // 🧠 ฟังก์ชันสกัดน้ำหนักจริง (ตัดค่าไขมันทิ้ง)
       const processWeightData = (rawData: Uint8Array) => {
-        
-        // 1. ถ้าเป็นแพ็กเก็ตส่งข้อมูลมวลกายเต็มรูปแบบ (19 Bytes)
-        if (rawData.length >= 19 && rawData[0] === 0x10) {
-          // 🎯 น้ำหนักจริงซ่อนอยู่ที่ตำแหน่งที่ 10 และ 11 
-          let rawWeight = (rawData[10] << 8) | rawData[11];
-          let weight = (rawWeight * 0.01).toFixed(1); 
+        if (rawData.length < 6) return;
+
+        // 🎯 น้ำหนักจริงของ ALLWELL ซ่อนอยู่ที่ Byte 4 และ 5 (Big Endian)
+        let rawWeight = (rawData[4] << 8) | rawData[5];
+        let weight = (rawWeight * 0.01).toFixed(2); // บังคับทศนิยม 2 ตำแหน่ง (เช่น 69.25)
           
-          if (parseFloat(weight) > 2.0 && parseFloat(weight) < 250.0) {
-            console.log(`🎯 [SUCCESS] น้ำหนักที่ดึงได้: ${weight} kg`);
+        // แผนสำรอง: ป้องกันกรณีบอร์ดส่งค่ามาผิดท่อ (ซ่อนไว้ที่ Byte 2 และ 3)
+        if (parseFloat(weight) < 5.0 && rawData.length >= 4) {
+           let altWeight = (rawData[2] << 8) | rawData[3];
+           weight = (altWeight * 0.01).toFixed(2);
+        }
+
+        // คัดกรองเฉพาะค่าน้ำหนักคนจริงๆ (5 kg ถึง 250 kg)
+        if (parseFloat(weight) > 5.0 && parseFloat(weight) < 250.0) {
+           const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+           console.log(`⚖️ [WEIGHT UNLOCKED] ได้ค่าน้ำหนัก: ${weight} kg (จากแพ็กเก็ต: ${hexStr})`);
             
-            // อัปเดตขึ้นจอ Kiosk ทันที
-            setVitals(prev => {
-              if (prev.weight === weight.toString()) return prev; // กันกระตุก
+           // อัปเดตข้อมูลขึ้นหน้าจอ
+           setVitals(prev => {
+              if (prev.weight === weight.toString()) return prev; // ป้องกันหน้าจอกระตุก
               const h = parseFloat(prev.height) / 100;
               return { 
                 ...prev, 
                 weight: weight.toString(), 
                 bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
               };
-            });
-          }
-        } 
-        // 2. แผนสำรอง: ถ้าส่งมาเป็นแพ็กเก็ต 12 Byte ธรรมดา (เผื่อเครื่องชั่งโหมดประหยัดพลังงาน)
-        else if (rawData.length === 12 && rawData[0] === 0x10) {
-          let rawWeight = (rawData[4] << 8) | rawData[5];
-          let weight = (rawWeight * 0.01).toFixed(1); 
-          if (parseFloat(weight) > 2.0) {
-            setVitals(prev => {
-              if (prev.weight === weight.toString()) return prev;
-              const h = parseFloat(prev.height) / 100;
-              return { ...prev, weight: weight.toString(), bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' };
-            });
-          }
+           });
         }
       };
 
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
       const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
 
-      // ==========================================
-      // 🎧 1. เปิดท่อรับฟัง (Notify)
-      // ==========================================
+      // 🎧 1. เปิดท่อดักฟัง
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
@@ -479,14 +471,10 @@ function App() {
         } catch (e) {}
       }
 
-      // ==========================================
-      // 🔑 2. ยิงรหัสปลดล็อค (The Magic Packets)
-      // ==========================================
+      // 🔑 2. ยิงคำสั่งปลุก (เอาคำสั่งดึงประวัติเก่าออกแล้ว)
       const wakeUpCommands = [
-        new Uint8Array([0xFD, 0x37]),  // รหัสปลุก
-        new Uint8Array([0x00, 0x00]),  // Null packet
-        new Uint8Array([0x03, 0x00]),  // Ping
-        new Uint8Array([0x10, 0x00, 0x00, 0x00]) // Broadcast
+        new Uint8Array([0xFD, 0x37]),  // รหัสปลุกเซนเซอร์มาตรฐาน
+        new Uint8Array([0x03, 0x00])   // รหัสเริ่มสตรีมข้อมูล Live
       ];
 
       for (const char of writePipes) {
@@ -498,9 +486,7 @@ function App() {
         }
       }
 
-      // ==========================================
-      // 💓 3. ระบบ Heartbeat ป้องกันเครื่องตัดสาย
-      // ==========================================
+      // 💓 3. ระบบ Heartbeat เบาๆ รักษาการเชื่อมต่อ
       const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
       if (mainWritePipe) {
          loopInterval = setInterval(async () => {
@@ -517,7 +503,7 @@ function App() {
         console.log("❌ อุปกรณ์ตัดการเชื่อมต่อ");
       });
 
-      alert(`✅ เชื่อมต่อและปลดล็อคเครื่องชั่งสำเร็จ!`);
+      alert(`✅ เชื่อมต่อเครื่องชั่ง ALLWELL สำเร็จ! ขึ้นชั่งได้เลยครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
