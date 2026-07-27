@@ -410,8 +410,6 @@ function App() {
   };
 
   const connectBluetoothWeight = async () => {
-    let loopInterval: NodeJS.Timeout | null = null; 
-
     try {
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
@@ -423,67 +421,82 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 [Naked Matrix Mode] เปิดระบบดู Raw Data เพียวๆ ไร้การคำนวณ!");
-
-      // 🧠 ฟังก์ชันปริ้น Raw Hex เปล่าๆ
-      const processWeightData = (rawData: Uint8Array) => {
-        const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
-
-        // กรองเฉพาะพวก Heartbeat ที่เป็น 0.00 ทิ้งไป จะได้ดูง่ายๆ
-        if (hexStr.includes("00 00 00 00 00 00 00 00")) return;
-        if (hexStr.includes("10 0a 00 07 00 00 00 00")) return;
-
-        // ปริ้นสิ่งที่เครื่องชั่งส่งมาทั้งหมด!
-        console.log(`📦 [RAW HEX] -> ${hexStr}`);
-      };
+      console.log("🚀 [God-Tier] ระบบ Profile Handshake พร้อมเจรจา!");
 
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
-      const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
+      const writePipe = characteristics?.find(c => c.properties.write || c.properties.writeWithoutResponse);
 
+      const processData = async (rawData: Uint8Array) => {
+        const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+
+        if (hexStr.includes("00 00 00 00 00 00 00 00")) return; // กรองขยะทิ้ง
+
+        console.log(`📥 ข้อมูลจากเครื่องชั่ง: ${hexStr}`);
+
+        // 🎯 THE GOLDEN KEY: ถ้าเครื่องชั่งส่ง 00 01 02 มาขอดูข้อมูล
+        if (rawData.length === 3 && rawData[0] === 0x00 && rawData[1] === 0x01 && rawData[2] === 0x02) {
+          console.log("🔥 เครื่องชั่งขอมวลร่างกาย! กำลังส่ง Profile จำลองไปปลดล็อค...");
+          
+          if (writePipe) {
+            // รหัสปลดล็อคจำลอง: [คำสั่ง, ID 1, ชาย, อายุ 30, สูง 170cm, 0, 0, 0]
+            const profileCmd = new Uint8Array([0xFE, 0x01, 0x01, 0x1E, 0xAA, 0x00, 0x00, 0x00]);
+            try {
+              if (writePipe.properties.writeWithoutResponse) await writePipe.writeValueWithoutResponse(profileCmd);
+              else await writePipe.writeValue(profileCmd);
+              console.log("✅ ส่ง Profile สำเร็จ! เครื่องชั่งกำลังคายน้ำหนักจริงออกมา...");
+            } catch (e) {
+              console.error("ยิง Profile ไม่ผ่าน", e);
+            }
+          }
+          return; // จบการทำงานรอบนี้ รอรับแพ็กเก็ตถัดไป
+        }
+
+        // 🎯 รับน้ำหนักที่แท้จริง (หลังจากส่ง Profile สำเร็จ)
+        if (rawData.length >= 6) {
+           let foundWeight: string | null = null;
+
+           // สแกนหาตัวเลขน้ำหนัก (กันประวัติเก่า 92.17 เข้ามาแทรก)
+           for (let i = 0; i < rawData.length - 1; i++) {
+             let valBig = (rawData[i] << 8) | rawData[i + 1];
+             let kgBig = (valBig * 0.01).toFixed(2);
+             
+             // ล็อคให้โชว์เฉพาะน้ำหนักที่สมเหตุสมผล
+             if (parseFloat(kgBig) > 30.0 && parseFloat(kgBig) < 150.0) {
+               foundWeight = kgBig;
+             }
+           }
+
+           if (foundWeight) {
+              console.log(`🎉 [BINGO!] รับค่าน้ำหนักล่าสุดสำเร็จ: ${foundWeight} kg`);
+              
+              setVitals(prev => {
+                if (prev.weight === foundWeight) return prev; // กันจอกระพริบ
+                const h = parseFloat(prev.height) / 100;
+                return { 
+                  ...prev, 
+                  weight: foundWeight!.toString(), 
+                  bmi: h > 0 ? (parseFloat(foundWeight!) / (h * h)).toFixed(2) : '---' 
+                };
+              });
+           }
+        }
+      };
+
+      // เปิดหูรับฟังข้อมูล
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
           char.addEventListener('characteristicvaluechanged', (event: any) => {
-            processWeightData(new Uint8Array(event.target.value.buffer));
+            processData(new Uint8Array(event.target.value.buffer));
           });
         } catch (e) {}
       }
 
-      // 🔑 ส่งรหัสแค่การ Bind ไม่ขอดึงประวัติเก่า
-      const wakeUpCommands = [
-        new Uint8Array([0xFD, 0x37]),  
-        new Uint8Array([0x01, 0x00])   
-      ];
-
-      for (const char of writePipes) {
-        for (const cmd of wakeUpCommands) {
-           try {
-             if (char.properties.writeWithoutResponse) await char.writeValueWithoutResponse(cmd);
-             else await char.writeValue(cmd);
-           } catch(e) { }
-        }
-      }
-
-      const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
-      if (mainWritePipe) {
-         loopInterval = setInterval(async () => {
-            try {
-              const ping = new Uint8Array([0x00]); 
-              if (mainWritePipe.properties.writeWithoutResponse) await mainWritePipe.writeValueWithoutResponse(ping);
-              else await mainWritePipe.writeValue(ping);
-            } catch(e) {}
-         }, 1500); 
-      }
-
-      device.addEventListener('gattserverdisconnected', () => {
-        if (loopInterval) clearInterval(loopInterval);
-      });
-
-      alert(`✅ โหมด Naked Matrix ทำงาน! กรุณาชั่งน้ำหนัก`);
+      alert(`✅ ระบบพร้อม 100%! ก้าวขึ้นชั่งได้เลยครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
-      
-    } catch (error) { 
-      if (loopInterval) clearInterval(loopInterval);
+
+    } catch (error) {
+      console.error("BLE Error:", error);
     }
   };
 
