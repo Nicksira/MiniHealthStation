@@ -431,41 +431,55 @@ function App() {
           await characteristic.startNotifications();
           console.log("✅ เริ่มดักฟังท่อ:", characteristic.uuid);
           
-          characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
-            try {
-              const value = event.target.value;
-              const rawData = new Uint8Array(value.buffer);
-              
-              if (rawData.length >= 6) {
-                // คำนวณหาค่าน้ำหนัก
-                let w1 = ((rawData[1] << 8) | rawData[2]); 
-                let w2 = ((rawData[2] << 8) | rawData[3]);
-                let w3 = ((rawData[4] << 8) | rawData[5]); // 🎯 เป้าหมายหลัก (ตำแหน่ง 4 และ 5)
-                let w4 = ((rawData[5] << 8) | rawData[6]);
-                
-                // พิมพ์ Log ทิ้งไว้ใน Console (F12) เพื่อดูค่าตอนยืน
-                console.log(`RAW BYTES:`, rawData.join("-"));
-                console.log(`ลองดูว่าข้อไหนตรงกับน้ำหนักจริง :: 1: ${(w1*0.01).toFixed(2)} | 2: ${(w2*0.01).toFixed(2)} | 3: ${(w3*0.01).toFixed(2)} | 4: ${(w4*0.01).toFixed(2)}`);
+           characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
+            const value = event.target.value;
+            
+            // ------------------------------------------------
+            // 🚨 เครื่องดักฟัง: แปลงข้อมูลต่างดาวให้เป็นตัวเลขฐาน 16 (Hex)
+            let hexString = '';
+            for (let i = 0; i < value.byteLength; i++) {
+              hexString += value.getUint8(i).toString(16).padStart(2, '0') + ' ';
+            }
+            // สั่งพ่นข้อมูลดิบออกไปที่หน้าต่าง Console ของเบราว์เซอร์
+            console.log("📦 RAW DATA จากเครื่องชั่ง:", hexString);
+            // ------------------------------------------------
 
-                // เปลี่ยนมาใช้ w3 เป็นตัวจริง (เพราะค่าเริ่มต้นมันคือ 0.0)
-                let weight = (w3 * 0.01).toFixed(1); 
-                
-                // 🛡️ กรองข้อมูล: อัปเดตหน้าจอเฉพาะตอนที่น้ำหนักเกิน 5 kg ขึ้นไป
-                if (parseFloat(weight) > 5.0) {
-                  setVitals(prev => {
-                    const h = parseFloat(prev.height) / 100;
-                    return { 
-                      ...prev, 
-                      weight: weight.toString(), 
-                      bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
-                    };
-                  });
+            try {
+              // สมมติฐานการถอดรหัสชั่วคราว (เพื่อให้ระบบทำงานไปก่อน)
+              const rawWeight = value.getUint16(1, true); 
+              const weight = (rawWeight * 0.005).toFixed(1); 
+              
+              setVitals(prev => {
+                const h = parseFloat(prev.height) / 100;
+                // อัปเดตเฉพาะถ้าน้ำหนักดูสมเหตุสมผล (มากกว่า 0)
+                if (parseFloat(weight) > 0) {
+                   return { 
+                     ...prev, 
+                     weight: weight.toString(), 
+                     bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+                   };
                 }
-              }
+                return prev;
+              });
             } catch (err) {
               console.error("Data Parsing Error:", err);
             }
           });
+        }
+      }
+      
+      if (!foundNotify) {
+        alert("❌ เชื่อมต่อได้ แต่ไม่พบระบบส่งข้อมูลแบบ Real-time");
+      } else {
+        alert(`✅ เชื่อมต่อเครื่องชั่ง ${device.name || 'BODYA'} สำเร็จ! (เปิดระบบดักฟังแล้ว)`);
+        updateDeviceName('weight', device.name || 'BODYA Scale');
+      }
+      
+    } catch (error) { 
+      console.error("Weight Error:", error); 
+      alert('❌ เชื่อมต่อไม่สำเร็จ ลองเหยียบเครื่องชั่งให้ไฟติดก่อนครับ'); 
+    }
+  };
 
   const connectBluetoothTemp = async () => {
     try {
