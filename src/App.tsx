@@ -434,20 +434,31 @@ function App() {
           characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
             try {
               const value = event.target.value;
-              // แปลงข้อมูลดิบให้เป็น Array ของตัวเลข (0-255)
               const rawData = new Uint8Array(value.buffer);
               
-              // ตรวจสอบว่าข้อมูลมีความยาวพอที่จะถอดรหัส (ป้องกันแอปแครช)
               if (rawData.length >= 6) {
+                // 🕵️‍♂️ SPY MODE: ระบบเรดาร์กวาดหาข้อมูล Byte ทุกตัว
+                let w1 = ((rawData[1] << 8) | rawData[2]); 
+                let w2 = ((rawData[2] << 8) | rawData[3]);
+                let w3 = ((rawData[4] << 8) | rawData[5]);
+                let w4 = ((rawData[5] << 8) | rawData[6]);
+                let w5 = ((rawData[2] << 8) | rawData[1]); // Little Endian
+                let w6 = ((rawData[3] << 8) | rawData[2]); // Little Endian
                 
-                // ถอดรหัส: เอา Byte ตำแหน่งที่ 4 และ 5 มาต่อกัน (Bitwise Shift)
-                let rawWeight = (rawData[4] << 8) | rawData[5];
+                console.group("🔍 ระบบเรดาร์ค้นหาน้ำหนัก (Spy Mode)");
+                console.log(`📌 น้ำหนักบนเครื่องชั่งจริงคือเท่าไหร่ ให้ดูว่าตรงกับสูตรไหนที่สุดครับ`);
+                console.log(`สูตร 1: ${(w1 * 0.01).toFixed(2)} kg หรือ ${(w1 * 0.1).toFixed(1)} kg`);
+                console.log(`สูตร 2: ${(w2 * 0.01).toFixed(2)} kg หรือ ${(w2 * 0.1).toFixed(1)} kg`);
+                console.log(`สูตร 3: ${(w3 * 0.01).toFixed(2)} kg หรือ ${(w3 * 0.1).toFixed(1)} kg`);
+                console.log(`สูตร 4: ${(w4 * 0.01).toFixed(2)} kg หรือ ${(w4 * 0.1).toFixed(1)} kg`);
+                console.log(`สูตร 5: ${(w5 * 0.01).toFixed(2)} kg หรือ ${(w5 * 0.1).toFixed(1)} kg`);
+                console.log(`สูตร 6: ${(w6 * 0.01).toFixed(2)} kg หรือ ${(w6 * 0.1).toFixed(1)} kg`);
+                console.log("📦 RAW BYTES:", rawData.join(" "));
+                console.groupEnd();
                 
-                // ตัวคูณ: เครื่องชั่งจีนมักใช้ 0.01 หรือ 0.005 
-                let weight = (rawWeight * 0.01).toFixed(1); 
-
-                // กรองข้อมูล: ให้อัปเดตขึ้นจอ Kiosk ก็ต่อเมื่อน้ำหนักมากกว่า 2 กิโลกรัม
-                // (ป้องกันค่า 0.0 หรือค่าน้ำหนักกระโปรง/รองเท้าตอนคนไข้กำลังก้าวขึ้น)
+                // ชั่วคราว: เอาค่าสูตร 2 ไปแสดงบนจอก่อน (แบรนด์จีนส่วนใหญ่ใช้ตำแหน่งนี้)
+                let weight = (w2 * 0.01).toFixed(1); 
+                
                 if (parseFloat(weight) > 2.0) {
                   setVitals(prev => {
                     const h = parseFloat(prev.height) / 100;
