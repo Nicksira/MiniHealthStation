@@ -419,81 +419,53 @@ function App() {
       const server = await device.gatt?.connect();
       const service = await server?.getPrimaryService(0xA602);
       const characteristics = await service?.getCharacteristics();
-      
-      let foundNotify = false;
 
-      // วนลูปหาท่อส่งข้อมูลทั้งหมด
-      for (const characteristic of characteristics || []) {
-        console.log("🔍 พบท่อข้อมูล:", characteristic.uuid);
+      console.clear();
+      console.log("🚀 เริ่มต้นระบบสืบสวนท่อบลูทูธทั้งหมด จำนวน:", characteristics?.length);
 
-        if (characteristic.properties.notify || characteristic.properties.indicate) {
-          foundNotify = true;
-          await characteristic.startNotifications();
-          console.log("✅ เริ่มดักฟังท่อ:", characteristic.uuid);
-          
-          const connectBluetoothWeight = async () => {
-    try {
-      const device = await navigator.bluetooth.requestDevice({ 
-        acceptAllDevices: true, 
-        optionalServices: [0xA602] 
-      });
-      
-      const server = await device.gatt?.connect();
-      const service = await server?.getPrimaryService(0xA602);
-      const characteristics = await service?.getCharacteristics();
-
-      // วนลูปดักฟังทุกท่อ
+      // วนลูปดักฟังทุกท่อพร้อมตั้งชื่อกำกับ
       for (const characteristic of characteristics || []) {
         if (characteristic.properties.notify || characteristic.properties.indicate) {
-          await characteristic.startNotifications();
-          
-          characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
-            try {
+          try {
+            await characteristic.startNotifications();
+            const pipeName = characteristic.uuid.substring(4, 8); // ดึงเลข 4 ตัวกลางมาเป็นชื่อท่อ เช่น a625, a640
+            
+            console.log(`✅ ผูกเครื่องดักฟังกับท่อ: [${pipeName}] สำเร็จ`);
+
+            characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
               const value = event.target.value;
               const rawData = new Uint8Array(value.buffer);
               
-              // แปลงข้อมูลเป็นเลขฐาน 16 เพื่อให้ดูง่ายขึ้น
-              const hexString = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+              // แปลงเป็น Hex string เพื่อดูภาพรวม
+              const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
               
-              // 🕵️‍♂️ พิสูจน์หลักฐาน: พิมพ์บอกเลยว่าข้อมูลมาจาก "ท่อไหน"
-              const pipeId = event.target.uuid.split('-')[0]; // ดึงมาแค่รหัส 8 ตัวหน้า
-              console.log(`📡 [ท่อ ${pipeId}] ข้อมูล: ${hexString}`);
+              // กรองเฉพาะท่อที่ข้อมูลไม่ใช่แค่ Heartbeat นิ่งๆ
+              console.log(`📡 [ท่อ ${pipeName}] ความยาว ${rawData.length} ไบต์ -> [ ${hexStr} ]`);
 
-              if (rawData.length >= 6) {
-                // คำนวณน้ำหนักจากสูตร 3 (ตำแหน่งที่ 4 และ 5)
-                let w3 = ((rawData[4] << 8) | rawData[5]); 
-                let weight = (w3 * 0.01).toFixed(1); 
+              // ลองแปลงทุกตำแหน่งเผื่อเจอน้ำหนักซ่อนอยู่
+              if (rawData.length >= 4) {
+                let val1 = (rawData[0] << 8) | rawData[1];
+                let val2 = (rawData[2] << 8) | rawData[3];
+                let val3 = rawData.length >= 6 ? (rawData[4] << 8) | rawData[5] : 0;
                 
-                // ถ้าน้ำหนักเปลี่ยน ให้แสดงใน Console ด้วย
-                if (parseFloat(weight) > 0) {
-                   console.log(`⚖️ คำนวณน้ำหนักได้: ${weight} kg จากท่อ ${pipeId}`);
-                }
-                
-                // อัปเดตขึ้นจอ Kiosk ถ้าน้ำหนักเกิน 5 กิโล
-                if (parseFloat(weight) > 5.0) {
-                  setVitals(prev => {
-                    const h = parseFloat(prev.height) / 100;
-                    return { 
-                      ...prev, 
-                      weight: weight.toString(), 
-                      bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
-                    };
-                  });
+                // ถ้าน้ำหนักมากกว่า 2 กิโล ให้แสดงเตือนเด่นๆ ใน Console
+                if (val3 > 200) { // สมมติ 200 = 2.00 kg
+                  console.warn(`🎉 [Bingo!] พบตัวเลขเปลี่ยนที่ท่อ [${pipeName}] แปลงเป็นน้ำหนักได้: ${(val3 * 0.01).toFixed(1)} kg`);
                 }
               }
-            } catch (err) {
-              console.error("Data Parsing Error:", err);
-            }
-          });
+            });
+          } catch (err) {
+            console.log("⚠️ ท่อนี้ไม่ยอมให้ดักฟัง:", characteristic.uuid);
+          }
         }
       }
       
-      alert(`✅ เชื่อมต่อสำเร็จ!`);
+      alert(`✅ เชื่อมต่อและเปิดเรดาร์ทุกท่อเรียบร้อย! เปิด F12 ดูได้เลย`);
       updateDeviceName('weight', device.name || 'BODYA Scale');
       
     } catch (error) { 
       console.error("Weight Error:", error); 
-      alert('❌ ยกเลิกหรืออุปกรณ์มีปัญหา'); 
+      alert('❌ ยกเลิกการเชื่อมต่อ'); 
     }
   };
 
