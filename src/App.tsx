@@ -411,46 +411,55 @@ function App() {
 
   const connectBluetoothWeight = async () => {
     try {
-      // 1. สแกนหาเครื่องชั่ง และขออนุญาตเจาะเข้า Service ลับ 0xA602
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
-        optionalServices: [0xA602] // <-- รหัสลับของเครื่องชั่ง BODYA
+        optionalServices: [0xA602] 
       });
       
       const server = await device.gatt?.connect();
       const service = await server?.getPrimaryService(0xA602);
-      
-      // 2. เนื่องจากเราไม่รู้รหัสย่อย (Characteristic) เราจะสั่งดึงมาทั้งหมด
       const characteristics = await service?.getCharacteristics();
       
-      if (!characteristics || characteristics.length === 0) {
-        throw new Error("ไม่พบท่อส่งข้อมูลในเครื่องชั่งตัวนี้");
-      }
+      let foundNotify = false;
 
-      // 3. วนลูปหาท่อที่รองรับการส่งข้อมูล Real-time (Notify) แล้วดักฟังทันที
-      for (const characteristic of characteristics) {
+      // วนลูปหาท่อส่งข้อมูลทั้งหมด
+      for (const characteristic of characteristics || []) {
+        console.log("🔍 พบท่อข้อมูล:", characteristic.uuid);
+
         if (characteristic.properties.notify || characteristic.properties.indicate) {
+          foundNotify = true;
           await characteristic.startNotifications();
+          console.log("✅ เริ่มดักฟังท่อ:", characteristic.uuid);
           
           characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
+            const value = event.target.value;
+            
+            // ------------------------------------------------
+            // 🚨 เครื่องดักฟัง: แปลงข้อมูลต่างดาวให้เป็นตัวเลขฐาน 16 (Hex)
+            let hexString = '';
+            for (let i = 0; i < value.byteLength; i++) {
+              hexString += value.getUint8(i).toString(16).padStart(2, '0') + ' ';
+            }
+            // สั่งพ่นข้อมูลดิบออกไปที่หน้าต่าง Console ของเบราว์เซอร์
+            console.log("📦 RAW DATA จากเครื่องชั่ง:", hexString);
+            // ------------------------------------------------
+
             try {
-              const value = event.target.value;
-              
-              // 4. ถอดรหัสข้อมูล (Data Parsing)
-              // หมายเหตุ: หากน้ำหนักบนจอเว็บ ไม่ตรงกับหน้าจอเครื่องชั่ง
-              // อาจจะต้องเปลี่ยนจาก getUint16(1, true) เป็น getUint16(2, false)
-              // หรือแก้ตัวคูณ 0.005 เป็น 0.01 ครับ (ขึ้นอยู่กับรุ่นของ BODYA)
+              // สมมติฐานการถอดรหัสชั่วคราว (เพื่อให้ระบบทำงานไปก่อน)
               const rawWeight = value.getUint16(1, true); 
               const weight = (rawWeight * 0.005).toFixed(1); 
               
-              // 5. อัปเดตค่าน้ำหนักขึ้นหน้าจอ
               setVitals(prev => {
                 const h = parseFloat(prev.height) / 100;
-                return { 
-                  ...prev, 
-                  weight: weight.toString(), 
-                  bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
-                };
+                // อัปเดตเฉพาะถ้าน้ำหนักดูสมเหตุสมผล (มากกว่า 0)
+                if (parseFloat(weight) > 0) {
+                   return { 
+                     ...prev, 
+                     weight: weight.toString(), 
+                     bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+                   };
+                }
+                return prev;
               });
             } catch (err) {
               console.error("Data Parsing Error:", err);
@@ -459,12 +468,16 @@ function App() {
         }
       }
       
-      alert(`✅ เชื่อมต่อเครื่องชั่ง ${device.name || 'BODYA'} สำเร็จ!`);
-      updateDeviceName('weight', device.name || 'BODYA Scale');
+      if (!foundNotify) {
+        alert("❌ เชื่อมต่อได้ แต่ไม่พบระบบส่งข้อมูลแบบ Real-time");
+      } else {
+        alert(`✅ เชื่อมต่อเครื่องชั่ง ${device.name || 'BODYA'} สำเร็จ! (เปิดระบบดักฟังแล้ว)`);
+        updateDeviceName('weight', device.name || 'BODYA Scale');
+      }
       
     } catch (error) { 
       console.error("Weight Error:", error); 
-      alert('❌ เชื่อมต่อไม่สำเร็จ: กรุณาใช้เท้าเหยียบให้หน้าจอเครื่องชั่งสว่างก่อนกดเชื่อมต่อ หรืออุปกรณ์อาจโดนมือถือเครื่องอื่นแย่งเชื่อมต่ออยู่ครับ'); 
+      alert('❌ เชื่อมต่อไม่สำเร็จ ลองเหยียบเครื่องชั่งให้ไฟติดก่อนครับ'); 
     }
   };
 
