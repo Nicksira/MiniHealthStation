@@ -432,54 +432,37 @@ function App() {
           console.log("✅ เริ่มดักฟังท่อ:", characteristic.uuid);
           
           characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
-            const value = event.target.value;
-            
-            // ------------------------------------------------
-            // 🚨 เครื่องดักฟัง: แปลงข้อมูลต่างดาวให้เป็นตัวเลขฐาน 16 (Hex)
-            let hexString = '';
-            for (let i = 0; i < value.byteLength; i++) {
-              hexString += value.getUint8(i).toString(16).padStart(2, '0') + ' ';
-            }
-            // สั่งพ่นข้อมูลดิบออกไปที่หน้าต่าง Console ของเบราว์เซอร์
-            console.log("📦 RAW DATA จากเครื่องชั่ง:", hexString);
-            // ------------------------------------------------
-
             try {
-              // สมมติฐานการถอดรหัสชั่วคราว (เพื่อให้ระบบทำงานไปก่อน)
-              const rawWeight = value.getUint16(1, true); 
-              const weight = (rawWeight * 0.005).toFixed(1); 
+              const value = event.target.value;
+              // แปลงข้อมูลดิบให้เป็น Array ของตัวเลข (0-255)
+              const rawData = new Uint8Array(value.buffer);
               
-              setVitals(prev => {
-                const h = parseFloat(prev.height) / 100;
-                // อัปเดตเฉพาะถ้าน้ำหนักดูสมเหตุสมผล (มากกว่า 0)
-                if (parseFloat(weight) > 0) {
-                   return { 
-                     ...prev, 
-                     weight: weight.toString(), 
-                     bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
-                   };
+              // ตรวจสอบว่าข้อมูลมีความยาวพอที่จะถอดรหัส (ป้องกันแอปแครช)
+              if (rawData.length >= 6) {
+                
+                // ถอดรหัส: เอา Byte ตำแหน่งที่ 4 และ 5 มาต่อกัน (Bitwise Shift)
+                let rawWeight = (rawData[4] << 8) | rawData[5];
+                
+                // ตัวคูณ: เครื่องชั่งจีนมักใช้ 0.01 หรือ 0.005 
+                let weight = (rawWeight * 0.01).toFixed(1); 
+
+                // กรองข้อมูล: ให้อัปเดตขึ้นจอ Kiosk ก็ต่อเมื่อน้ำหนักมากกว่า 2 กิโลกรัม
+                // (ป้องกันค่า 0.0 หรือค่าน้ำหนักกระโปรง/รองเท้าตอนคนไข้กำลังก้าวขึ้น)
+                if (parseFloat(weight) > 2.0) {
+                  setVitals(prev => {
+                    const h = parseFloat(prev.height) / 100;
+                    return { 
+                      ...prev, 
+                      weight: weight.toString(), 
+                      bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+                    };
+                  });
                 }
-                return prev;
-              });
+              }
             } catch (err) {
               console.error("Data Parsing Error:", err);
             }
           });
-        }
-      }
-      
-      if (!foundNotify) {
-        alert("❌ เชื่อมต่อได้ แต่ไม่พบระบบส่งข้อมูลแบบ Real-time");
-      } else {
-        alert(`✅ เชื่อมต่อเครื่องชั่ง ${device.name || 'BODYA'} สำเร็จ! (เปิดระบบดักฟังแล้ว)`);
-        updateDeviceName('weight', device.name || 'BODYA Scale');
-      }
-      
-    } catch (error) { 
-      console.error("Weight Error:", error); 
-      alert('❌ เชื่อมต่อไม่สำเร็จ ลองเหยียบเครื่องชั่งให้ไฟติดก่อนครับ'); 
-    }
-  };
 
   const connectBluetoothTemp = async () => {
     try {
