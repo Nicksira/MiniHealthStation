@@ -423,41 +423,50 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 [Enterprise Mode] Smart Dual-Parser ทำงาน!");
+      console.log("🚀 [God-Mode] ระบบ Brute-Force Scanner เริ่มทำงาน!");
 
-      // 🧠 AI แยกแยะโหมดข้อมูลอัตโนมัติ
+      // 🧠 ฟังก์ชันสแกนปูพรม หาตัวเลขที่หน้าตาเหมือนน้ำหนัก
       const processWeightData = (rawData: Uint8Array) => {
-        if (rawData.length < 6) return;
-
         const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
-        let finalWeight = "0.00";
-        let mode = "";
 
-        // 🎯 กรณีที่ 1: โหมด Live Data (รหัสหัว 10 0a)
-        if (rawData[0] === 0x10 && rawData[1] === 0x0a) {
-           let rawVal = (rawData[4] << 8) | rawData[5];
-           finalWeight = (rawVal * 0.01).toFixed(2);
-           mode = "LIVE";
+        // ซ่อนแพ็กเก็ตขยะ 0.00 kg จะได้ไม่รกหน้าจอ
+        if (hexStr.includes("10 0a 00 07 00 00 00 00")) return;
+
+        console.log(`📦 ข้อมูลเข้ามาแล้ว!: ${hexStr}`);
+
+        let foundWeight: string | null = null;
+
+        // สแกนแงะตัวเลขทุกคู่ในแพ็กเก็ต
+        for (let i = 0; i < rawData.length - 1; i++) {
+          
+          // คำนวณแบบเดินหน้า (Big-Endian)
+          let valBig = (rawData[i] << 8) | rawData[i + 1];
+          let kgBig = (valBig * 0.01).toFixed(2);
+          
+          if (parseFloat(kgBig) > 30.0 && parseFloat(kgBig) < 150.0) {
+            console.log(`🔥 [BINGO] เจอค่าน้ำหนัก ${kgBig} kg (ซ่อนอยู่ที่ไบต์ ${i} และ ${i+1})`);
+            foundWeight = kgBig;
+          }
+
+          // คำนวณแบบถอยหลัง (Little-Endian)
+          let valLittle = (rawData[i + 1] << 8) | rawData[i];
+          let kgLittle = (valLittle * 0.01).toFixed(2);
+          
+          if (parseFloat(kgLittle) > 30.0 && parseFloat(kgLittle) < 150.0 && kgLittle !== kgBig) {
+            console.log(`🔥 [BINGO] เจอค่าน้ำหนัก ${kgLittle} kg (ซ่อนอยู่ที่ไบต์ ${i} และ ${i+1} สลับด้าน)`);
+            foundWeight = kgLittle;
+          }
         }
-        // 🎯 กรณีที่ 2: โหมด History (รหัสหัว 10 11) - น้ำหนักจริงซ่อนที่ไบต์ 10,11
-        else if (rawData[0] === 0x10 && rawData[1] === 0x11 && rawData.length >= 12) {
-           let rawVal = (rawData[10] << 8) | rawData[11];
-           finalWeight = (rawVal * 0.01).toFixed(2);
-           mode = "HISTORY";
-        }
 
-        // ปริ้นทุกอย่างออก Console เพื่อให้เช็คได้ง่าย
-        console.log(`📦 [${mode || 'UNKNOWN'}] แพ็กเก็ต: ${hexStr} -> แปลงค่าได้: ${finalWeight} kg`);
-
-        // ถ้าค่าที่ได้เป็นน้ำหนักคนจริงๆ (เกิน 5 กิโล) ให้ยิงขึ้นหน้าจอเลย!
-        if (parseFloat(finalWeight) > 5.0 && parseFloat(finalWeight) < 250.0) {
+        // ถ้างัดค่าน้ำหนักออกมาได้สำเร็จ ยิงขึ้นจอ JHCIS เลย
+        if (foundWeight) {
            setVitals(prev => {
-              if (prev.weight === finalWeight.toString()) return prev; // กันจอกระตุก
+              if (prev.weight === foundWeight?.toString()) return prev; 
               const h = parseFloat(prev.height) / 100;
               return { 
                 ...prev, 
-                weight: finalWeight.toString(), 
-                bmi: h > 0 ? (parseFloat(finalWeight) / (h * h)).toFixed(2) : '---' 
+                weight: foundWeight.toString(), 
+                bmi: h > 0 ? (parseFloat(foundWeight) / (h * h)).toFixed(2) : '---' 
               };
            });
         }
@@ -466,21 +475,22 @@ function App() {
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
       const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
 
-      // 🎧 1. เปิดดักฟังทุกท่อ
+      // 🎧 1. ดักฟังข้อมูลทุกท่อ
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
           char.addEventListener('characteristicvaluechanged', (event: any) => {
-            const rawData = new Uint8Array(event.target.value.buffer);
-            processWeightData(rawData);
+            processWeightData(new Uint8Array(event.target.value.buffer));
           });
         } catch (e) {}
       }
 
-      // 🔑 2. ยิงรหัสปลุก
+      // 🔑 2. ยิงรหัสปลดล็อค (ใส่กลับมาครบทุกคำสั่ง เพื่อให้เครื่องพ่นข้อมูล!)
       const wakeUpCommands = [
         new Uint8Array([0xFD, 0x37]),  
-        new Uint8Array([0x03, 0x00])   
+        new Uint8Array([0x00, 0x00]),  
+        new Uint8Array([0x03, 0x00]),  
+        new Uint8Array([0x10, 0x00, 0x00, 0x00]) 
       ];
 
       for (const char of writePipes) {
@@ -492,7 +502,7 @@ function App() {
         }
       }
 
-      // 💓 3. ระบบรักษาการเชื่อมต่อ
+      // 💓 3. ระบบ Heartbeat เลี้ยงการเชื่อมต่อ
       const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
       if (mainWritePipe) {
          loopInterval = setInterval(async () => {
@@ -506,15 +516,13 @@ function App() {
 
       device.addEventListener('gattserverdisconnected', () => {
         if (loopInterval) clearInterval(loopInterval);
-        console.log("❌ อุปกรณ์ตัดสาย");
       });
 
-      alert(`✅ เชื่อมต่อและปลดล็อคเครื่องชั่งสำเร็จ!`);
+      alert(`✅ เครื่องพร้อมทำงาน! กรุณาก้าวขึ้นชั่งน้ำหนักได้เลยครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
       if (loopInterval) clearInterval(loopInterval);
-      console.error("BLE Error:", error); 
     }
   };
 
