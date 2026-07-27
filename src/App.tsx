@@ -410,6 +410,8 @@ function App() {
   };
 
   const connectBluetoothWeight = async () => {
+    let memoryScraperInterval = null; 
+
     try {
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
@@ -421,41 +423,86 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🛠️ [Architect Mode] X-Ray Scanning ALLWELL Architecture...");
+      console.log("🏥 [Health Tech Architect] ระบบ Hybrid BLE พร้อมทำงาน!");
 
-      // สแกนทุกท่อเพื่อดูว่าท่อไหนรองรับคำสั่ง Write
-      for (const char of characteristics || []) {
-        const pipeId = char.uuid.substring(4, 8);
-        const props = [];
-        
-        if (char.properties.read) props.push("READ (อ่าน)");
-        if (char.properties.write) props.push("WRITE (เขียนคำสั่ง)");
-        if (char.properties.writeWithoutResponse) props.push("WRITE_NO_RESP");
-        if (char.properties.notify) props.push("NOTIFY (ดักฟัง)");
-        if (char.properties.indicate) props.push("INDICATE");
-
-        console.log(`📡 ท่อ [${pipeId}] รองรับสิทธิ์: ${props.join(", ")}`);
-
-        // ถ้าดักฟังได้ ก็เปิดดักฟังไว้เผื่อฟลุค
-        if (char.properties.notify || char.properties.indicate) {
-          try {
-            await char.startNotifications();
-            char.addEventListener('characteristicvaluechanged', (event: any) => {
-              const rawData = new Uint8Array(event.target.value.buffer);
-              const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
-              console.log(`📥 [ท่อ ${pipeId} ส่งข้อมูลมา]: ${hexStr}`);
+      // 🧠 ศูนย์กลางประมวลผลข้อมูล
+      const processWeightData = (rawData, sourceName) => {
+        if (rawData.length >= 6) {
+          let rawWeight = (rawData[4] << 8) | rawData[5];
+          let weight = (rawWeight * 0.01).toFixed(1); 
+          
+          if (parseFloat(weight) > 5.0 && parseFloat(weight) < 250.0) {
+            console.log(`🎯 [BINGO!] ดึงข้อมูลจาก ${sourceName} -> น้ำหนักจริง: ${weight} kg`);
+            
+            setVitals(prev => {
+              if (prev.weight === weight.toString()) return prev;
+              const h = parseFloat(prev.height) / 100;
+              return { 
+                ...prev, 
+                weight: weight.toString(), 
+                bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+              };
             });
-          } catch(e) {
-            console.log(`⚠️ ไม่สามารถเปิดดักฟังท่อ ${pipeId} ได้`);
           }
         }
+      };
+
+      const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
+      const readPipes = characteristics?.filter(c => c.properties.read) || [];
+
+      // ==========================================
+      // Engine 1: Passive Listener (ดักฟังปกติ)
+      // ==========================================
+      for (const char of notifyPipes) {
+        try {
+          await char.startNotifications();
+          const pipeId = char.uuid.substring(4, 8);
+          console.log(`🎧 [Engine 1] เปิดระบบดักฟังท่อ: ${pipeId}`);
+          
+          char.addEventListener('characteristicvaluechanged', (event) => {
+            const rawData = new Uint8Array(event.target.value.buffer);
+            processWeightData(rawData, `NOTIFY-${pipeId}`);
+          });
+        } catch (e) {
+          console.warn(`⚠️ ข้ามการดักฟังท่อที่ไม่อนุญาต`);
+        }
       }
-      
-      alert(`✅ สแกนระบบสำเร็จ กรุณาดูในหน้าต่าง F12 ครับ`);
+
+      // ==========================================
+      // Engine 2: Active Memory Scraper (งัดข้อมูลจากหน่วยความจำ)
+      // ==========================================
+      if (readPipes.length > 0) {
+        console.log(`⏱️ [Engine 2] เปิดระบบดึงข้อมูลอัตโนมัติจากท่อ READ (a640/a641)...`);
+        
+        // สั่งให้ดึงข้อมูลทุกๆ 1 วินาที
+        memoryScraperInterval = setInterval(async () => {
+          for (const char of readPipes) {
+            try {
+              const value = await char.readValue();
+              const rawData = new Uint8Array(value.buffer);
+              if (rawData.length > 0) {
+                processWeightData(rawData, `READ-${char.uuid.substring(4, 8)}`);
+              }
+            } catch (e) {
+              // ซ่อน Error ท่อที่ถูกล็อคไม่ให้รก Console
+            }
+          }
+        }, 1000); 
+      }
+
+      // จัดการเคลียร์การดึงข้อมูลเมื่อสายหลุด
+      device.addEventListener('gattserverdisconnected', () => {
+        if (memoryScraperInterval) clearInterval(memoryScraperInterval);
+        console.log("❌ อุปกรณ์ตัดการเชื่อมต่อ");
+      });
+
+      alert(`✅ ระบบพร้อม 100%! เชื่อมต่อ ALLWELL สำเร็จ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
-      console.error("BLE Critical Error:", error); 
+      if (memoryScraperInterval) clearInterval(memoryScraperInterval);
+      console.error("BLE Error:", error); 
+      alert('❌ การเชื่อมต่อล้มเหลว หรืออุปกรณ์ถูกแย่งสัญญาณ'); 
     }
   };
 
