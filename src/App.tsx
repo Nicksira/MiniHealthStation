@@ -411,50 +411,60 @@ function App() {
 
   const connectBluetoothWeight = async () => {
     try {
-      // 1. เปิดโหมด Universal Scan (รับทุกยี่ห้อ ไม่ล็อคชื่อ)
+      // 1. สแกนหาเครื่องชั่ง และขออนุญาตเจาะเข้า Service ลับ 0xA602
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
-        optionalServices: ['weight_scale'] // เข้าถึง Service มาตรฐาน 0x181D
+        optionalServices: [0xA602] // <-- รหัสลับของเครื่องชั่ง BODYA
       });
       
       const server = await device.gatt?.connect();
-      const service = await server?.getPrimaryService('weight_scale');
-      const characteristic = await service?.getCharacteristic('weight_measurement'); // เข้าถึง Characteristic มาตรฐาน 0x2A9D
+      const service = await server?.getPrimaryService(0xA602);
       
-      await characteristic?.startNotifications();
+      // 2. เนื่องจากเราไม่รู้รหัสย่อย (Characteristic) เราจะสั่งดึงมาทั้งหมด
+      const characteristics = await service?.getCharacteristics();
       
-      characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
-        try {
-          const value = event.target.value;
+      if (!characteristics || characteristics.length === 0) {
+        throw new Error("ไม่พบท่อส่งข้อมูลในเครื่องชั่งตัวนี้");
+      }
+
+      // 3. วนลูปหาท่อที่รองรับการส่งข้อมูล Real-time (Notify) แล้วดักฟังทันที
+      for (const characteristic of characteristics) {
+        if (characteristic.properties.notify || characteristic.properties.indicate) {
+          await characteristic.startNotifications();
           
-          // 2. ถอดรหัส Byte (Data Parsing) แบบ Little Endian
-          const rawWeight = value.getUint16(1, true); 
-          
-          // ⚠️ จุดสังเกตสำคัญ (Multiplier):
-          // เครื่องชั่งทั่วไปในท้องตลาดมักจะใช้ตัวคูณ 0.005 หรือ 0.01
-          // ถ้าน้ำหนักคนไข้ชั่งได้ 60kg แต่ในจอขึ้น 30kg แปลว่าต้องเปลี่ยนจาก 0.005 เป็น 0.01 ครับ
-          const weight = (rawWeight * 0.005).toFixed(1); 
-          
-          // 3. อัปเดต State พร้อมคำนวณ BMI อัตโนมัติทันทีที่น้ำหนักเข้า
-          setVitals(prev => {
-            const h = parseFloat(prev.height) / 100;
-            return { 
-              ...prev, 
-              weight: weight.toString(), 
-              bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
-            };
+          characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
+            try {
+              const value = event.target.value;
+              
+              // 4. ถอดรหัสข้อมูล (Data Parsing)
+              // หมายเหตุ: หากน้ำหนักบนจอเว็บ ไม่ตรงกับหน้าจอเครื่องชั่ง
+              // อาจจะต้องเปลี่ยนจาก getUint16(1, true) เป็น getUint16(2, false)
+              // หรือแก้ตัวคูณ 0.005 เป็น 0.01 ครับ (ขึ้นอยู่กับรุ่นของ BODYA)
+              const rawWeight = value.getUint16(1, true); 
+              const weight = (rawWeight * 0.005).toFixed(1); 
+              
+              // 5. อัปเดตค่าน้ำหนักขึ้นหน้าจอ
+              setVitals(prev => {
+                const h = parseFloat(prev.height) / 100;
+                return { 
+                  ...prev, 
+                  weight: weight.toString(), 
+                  bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+                };
+              });
+            } catch (err) {
+              console.error("Data Parsing Error:", err);
+            }
           });
-        } catch (err) {
-          console.error("Data Parsing Error: ข้อมูลขยะเข้ามา", err);
         }
-      });
+      }
       
-      alert(`✅ เชื่อมต่อเครื่องชั่ง ${device.name || 'Bluetooth Scale'} สำเร็จ!`);
-      updateDeviceName('weight', device.name || 'Bluetooth Scale');
+      alert(`✅ เชื่อมต่อเครื่องชั่ง ${device.name || 'BODYA'} สำเร็จ!`);
+      updateDeviceName('weight', device.name || 'BODYA Scale');
       
     } catch (error) { 
       console.error("Weight Error:", error); 
-      alert('❌ ยกเลิก หรือ เครื่องชั่งยี่ห้อนี้อาจใช้โปรโตคอลพิเศษที่ไม่ได้มาตรฐาน'); 
+      alert('❌ เชื่อมต่อไม่สำเร็จ: กรุณาใช้เท้าเหยียบให้หน้าจอเครื่องชั่งสว่างก่อนกดเชื่อมต่อ หรืออุปกรณ์อาจโดนมือถือเครื่องอื่นแย่งเชื่อมต่ออยู่ครับ'); 
     }
   };
 
