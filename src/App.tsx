@@ -423,35 +423,41 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 [Enterprise Mode] Precision Weight Extractor ทำงาน!");
+      console.log("🚀 [Enterprise Mode] Smart Dual-Parser ทำงาน!");
 
-      // 🧠 ฟังก์ชันสกัดน้ำหนักจริง (ตัดค่าไขมันทิ้ง)
+      // 🧠 AI แยกแยะโหมดข้อมูลอัตโนมัติ
       const processWeightData = (rawData: Uint8Array) => {
         if (rawData.length < 6) return;
 
-        // 🎯 น้ำหนักจริงของ ALLWELL ซ่อนอยู่ที่ Byte 4 และ 5 (Big Endian)
-        let rawWeight = (rawData[4] << 8) | rawData[5];
-        let weight = (rawWeight * 0.01).toFixed(2); // บังคับทศนิยม 2 ตำแหน่ง (เช่น 69.25)
-          
-        // แผนสำรอง: ป้องกันกรณีบอร์ดส่งค่ามาผิดท่อ (ซ่อนไว้ที่ Byte 2 และ 3)
-        if (parseFloat(weight) < 5.0 && rawData.length >= 4) {
-           let altWeight = (rawData[2] << 8) | rawData[3];
-           weight = (altWeight * 0.01).toFixed(2);
+        const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        let finalWeight = "0.00";
+        let mode = "";
+
+        // 🎯 กรณีที่ 1: โหมด Live Data (รหัสหัว 10 0a)
+        if (rawData[0] === 0x10 && rawData[1] === 0x0a) {
+           let rawVal = (rawData[4] << 8) | rawData[5];
+           finalWeight = (rawVal * 0.01).toFixed(2);
+           mode = "LIVE";
+        }
+        // 🎯 กรณีที่ 2: โหมด History (รหัสหัว 10 11) - น้ำหนักจริงซ่อนที่ไบต์ 10,11
+        else if (rawData[0] === 0x10 && rawData[1] === 0x11 && rawData.length >= 12) {
+           let rawVal = (rawData[10] << 8) | rawData[11];
+           finalWeight = (rawVal * 0.01).toFixed(2);
+           mode = "HISTORY";
         }
 
-        // คัดกรองเฉพาะค่าน้ำหนักคนจริงๆ (5 kg ถึง 250 kg)
-        if (parseFloat(weight) > 5.0 && parseFloat(weight) < 250.0) {
-           const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
-           console.log(`⚖️ [WEIGHT UNLOCKED] ได้ค่าน้ำหนัก: ${weight} kg (จากแพ็กเก็ต: ${hexStr})`);
-            
-           // อัปเดตข้อมูลขึ้นหน้าจอ
+        // ปริ้นทุกอย่างออก Console เพื่อให้เช็คได้ง่าย
+        console.log(`📦 [${mode || 'UNKNOWN'}] แพ็กเก็ต: ${hexStr} -> แปลงค่าได้: ${finalWeight} kg`);
+
+        // ถ้าค่าที่ได้เป็นน้ำหนักคนจริงๆ (เกิน 5 กิโล) ให้ยิงขึ้นหน้าจอเลย!
+        if (parseFloat(finalWeight) > 5.0 && parseFloat(finalWeight) < 250.0) {
            setVitals(prev => {
-              if (prev.weight === weight.toString()) return prev; // ป้องกันหน้าจอกระตุก
+              if (prev.weight === finalWeight.toString()) return prev; // กันจอกระตุก
               const h = parseFloat(prev.height) / 100;
               return { 
                 ...prev, 
-                weight: weight.toString(), 
-                bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+                weight: finalWeight.toString(), 
+                bmi: h > 0 ? (parseFloat(finalWeight) / (h * h)).toFixed(2) : '---' 
               };
            });
         }
@@ -460,7 +466,7 @@ function App() {
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
       const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
 
-      // 🎧 1. เปิดท่อดักฟัง
+      // 🎧 1. เปิดดักฟังทุกท่อ
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
@@ -471,10 +477,10 @@ function App() {
         } catch (e) {}
       }
 
-      // 🔑 2. ยิงคำสั่งปลุก (เอาคำสั่งดึงประวัติเก่าออกแล้ว)
+      // 🔑 2. ยิงรหัสปลุก
       const wakeUpCommands = [
-        new Uint8Array([0xFD, 0x37]),  // รหัสปลุกเซนเซอร์มาตรฐาน
-        new Uint8Array([0x03, 0x00])   // รหัสเริ่มสตรีมข้อมูล Live
+        new Uint8Array([0xFD, 0x37]),  
+        new Uint8Array([0x03, 0x00])   
       ];
 
       for (const char of writePipes) {
@@ -486,7 +492,7 @@ function App() {
         }
       }
 
-      // 💓 3. ระบบ Heartbeat เบาๆ รักษาการเชื่อมต่อ
+      // 💓 3. ระบบรักษาการเชื่อมต่อ
       const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
       if (mainWritePipe) {
          loopInterval = setInterval(async () => {
@@ -500,10 +506,10 @@ function App() {
 
       device.addEventListener('gattserverdisconnected', () => {
         if (loopInterval) clearInterval(loopInterval);
-        console.log("❌ อุปกรณ์ตัดการเชื่อมต่อ");
+        console.log("❌ อุปกรณ์ตัดสาย");
       });
 
-      alert(`✅ เชื่อมต่อเครื่องชั่ง ALLWELL สำเร็จ! ขึ้นชั่งได้เลยครับ`);
+      alert(`✅ เชื่อมต่อและปลดล็อคเครื่องชั่งสำเร็จ!`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
