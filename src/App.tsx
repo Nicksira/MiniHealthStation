@@ -423,40 +423,57 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 [Sniper Mode] ล็อคเป้าดึงน้ำหนักที่แท้จริง ทำงาน!");
+      console.log("🚀 [God-Mode] ปลดล็อกทุกตัวกรอง สแกนทะลุทุกไบต์!");
 
-      // 🧠 ฟังก์ชันสไนเปอร์: เจาะเฉพาะจุดที่เก็บน้ำหนัก
       const processWeightData = (rawData: Uint8Array) => {
-        if (rawData.length < 6) return;
+        const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
 
-        // 🚨 เช็คว่าต้องเป็นแพ็กเก็ต Live Data (หัว 10 0A) เท่านั้น ถึงจะยอมทำงาน
-        if (rawData[0] === 0x10 && rawData[1] === 0x0a) {
+        // บล็อกเฉพาะแพ็กเก็ตที่เป็น 0.00 ล้วนๆ จะได้ไม่รกหน้าต่าง Console
+        if (hexStr.includes("00 00 00 00 00 00 00 00")) return;
+
+        console.log(`📦 ข้อมูลดิบเข้า: ${hexStr}`);
+
+        let latestFoundWeight: string | null = null;
+
+        // สแกนเจาะตัวเลขทุกคู่ ทั้งแบบซ้ายไปขวา และ ขวาไปซ้าย
+        for (let i = 0; i < rawData.length - 1; i++) {
           
-          // 🎯 ดึงน้ำหนักจาก Byte 4 และ 5 (ข้าม Byte 0,1 ที่เคยทำจอเพี้ยนเป็น 41.06)
-          let rawWeight = (rawData[4] << 8) | rawData[5];
-          let weight = (rawWeight * 0.01).toFixed(2); 
+          // 1. ลองอ่านแบบ Big-Endian (เดินหน้า)
+          let valBig = (rawData[i] << 8) | rawData[i + 1];
+          let kgBig = (valBig * 0.01).toFixed(2);
+          
+          if (parseFloat(kgBig) > 30.0 && parseFloat(kgBig) < 150.0) {
+            latestFoundWeight = kgBig;
+            console.log(`🔥 เจอค่าน้ำหนัก: ${kgBig} kg (แบบเดินหน้า ไบต์ ${i})`);
+          }
 
-          // คัดกรองตัวเลข ถ้าน้ำหนักเกิน 5 กิโลกรัม ให้แสดงผลเลย!
-          if (parseFloat(weight) > 5.0 && parseFloat(weight) < 250.0) {
-            console.log(`🎯 [BINGO!] ล็อคเป้าน้ำหนักจริง: ${weight} kg`);
-            
-            setVitals(prev => {
-              if (prev.weight === weight.toString()) return prev; // กันจอกระพริบ
+          // 2. ลองอ่านแบบ Little-Endian (ถอยหลัง)
+          let valLittle = (rawData[i + 1] << 8) | rawData[i];
+          let kgLittle = (valLittle * 0.01).toFixed(2);
+          
+          if (parseFloat(kgLittle) > 30.0 && parseFloat(kgLittle) < 150.0 && kgLittle !== kgBig) {
+            latestFoundWeight = kgLittle;
+            console.log(`🔥 เจอค่าน้ำหนัก: ${kgLittle} kg (แบบถอยหลัง ไบต์ ${i})`);
+          }
+        }
+
+        // ถ้างัดค่าน้ำหนักออกมาได้สำเร็จ ยิงขึ้นจอทันที! (ค่าใหม่จะทับค่าเก่าอัตโนมัติ)
+        if (latestFoundWeight) {
+           setVitals(prev => {
+              if (prev.weight === latestFoundWeight?.toString()) return prev; // กันจอกระพริบ
               const h = parseFloat(prev.height) / 100;
               return { 
                 ...prev, 
-                weight: weight.toString(), 
-                bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+                weight: latestFoundWeight!.toString(), 
+                bmi: h > 0 ? (parseFloat(latestFoundWeight!) / (h * h)).toFixed(2) : '---' 
               };
-            });
-          }
+           });
         }
       };
 
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
       const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
 
-      // 🎧 1. เปิดรับข้อมูล
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
@@ -466,10 +483,12 @@ function App() {
         } catch (e) {}
       }
 
-      // 🔑 2. ยิงรหัสเปิดท่อข้อมูล (ลบรหัสขอประวัติเก่าออก จะได้ไม่มีขยะ)
+      // 🔑 ใส่กลับรหัสปลุกแบบจัดเต็ม 4 ชุด (ชุดเดียวกับที่เคยทำให้เครื่องคายข้อมูลประวัติออกมาได้)
       const wakeUpCommands = [
         new Uint8Array([0xFD, 0x37]),  
-        new Uint8Array([0x01, 0x00])   
+        new Uint8Array([0x00, 0x00]),  
+        new Uint8Array([0x03, 0x00]),  
+        new Uint8Array([0x10, 0x00, 0x00, 0x00]) 
       ];
 
       for (const char of writePipes) {
@@ -481,7 +500,6 @@ function App() {
         }
       }
 
-      // 💓 3. ระบบ Heartbeat รักษาการเชื่อมต่อไม่ให้เครื่องหลับ
       const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
       if (mainWritePipe) {
          loopInterval = setInterval(async () => {
@@ -490,7 +508,7 @@ function App() {
               if (mainWritePipe.properties.writeWithoutResponse) await mainWritePipe.writeValueWithoutResponse(ping);
               else await mainWritePipe.writeValue(ping);
             } catch(e) {}
-         }, 1000); 
+         }, 1500); 
       }
 
       device.addEventListener('gattserverdisconnected', () => {
@@ -498,7 +516,7 @@ function App() {
         console.log("❌ อุปกรณ์ตัดสาย");
       });
 
-      alert(`✅ ระบบล็อคเป้าทำงาน! กรุณาก้าวขึ้นชั่งได้เลยครับ`);
+      alert(`✅ โหมดปลดล็อกไร้ตัวกรองทำงาน! กรุณาก้าวขึ้นชั่งน้ำหนัก`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
