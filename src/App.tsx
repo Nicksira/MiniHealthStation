@@ -420,46 +420,67 @@ function App() {
       const service = await server?.getPrimaryService(0xA602);
       const characteristics = await service?.getCharacteristics();
 
-      // ตามรอยสืบสวน เราเจาะจงวิ่งไปที่ท่อ a621 ทันที
-      for (const characteristic of characteristics || []) {
-        if (characteristic.uuid.includes('a621')) {
-          await characteristic.startNotifications();
-          console.log("🎯 ล็อกเป้าสำเร็จ! กำลังดักฟังท่อส่งน้ำหนัก a621");
+      console.clear();
+      console.log("🚀 ALLWELL Auto-Scanner ทำงาน! เปิดระบบดักฟังทุกท่อ...");
 
-          characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
+      for (const char of characteristics || []) {
+        if (char.properties.notify || char.properties.indicate) {
+          await char.startNotifications();
+          const pipeId = char.uuid.substring(4, 8);
+          
+          // ตัวแปรจำค่าเก่า เพื่อกรองขยะ (Heartbeat) ทิ้ง
+          let lastData = "";
+
+          char.addEventListener('characteristicvaluechanged', (event: any) => {
             try {
-              const value = event.target.value;
-              const rawData = new Uint8Array(value.buffer);
+              const rawData = new Uint8Array(event.target.value.buffer);
               
-              if (rawData.length >= 6) {
-                // ⚖️ ดึงไบต์ที่ 4 และ 5 มาคำนวณน้ำหนัก
-                let rawWeight = (rawData[4] << 8) | rawData[5];
-                let weight = (rawWeight * 0.01).toFixed(1); 
+              // ตัด byte สุดท้าย (Checksum) ออก เพื่อดูว่ามีข้อมูลน้ำหนักจริงๆ เปลี่ยนไหม
+              const coreData = Array.from(rawData).slice(0, -1).join('-');
+              if (coreData === lastData) return; // ถ้าข้อมูลเหมือนเดิมเป๊ะ ข้ามเลย!
+              lastData = coreData;
 
-                // พิมพ์โชว์ใน Console เพื่อดูความเปลี่ยนแปลงตอนยืนชั่ง
-                console.log(`⚖️ น้ำหนักปัจจุบัน: ${weight} kg (Raw: ${rawWeight})`);
+              const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+              console.log(`📡 [ท่อ ${pipeId}] ข้อมูลใหม่เข้า!: ${hexStr}`);
 
-                // อัปเดตขึ้นหน้าจอ Kiosk เฉพาะตอนที่น้ำหนักเกิน 2 กิโลกรัมขึ้นไป
-                if (parseFloat(weight) > 2.0) {
-                  setVitals(prev => {
-                    const h = parseFloat(prev.height) / 100;
-                    return { 
-                      ...prev, 
-                      weight: weight.toString(), 
-                      bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
-                    };
-                  });
-                }
+              // 🎯 AI Auto-Scan: ค้นหาน้ำหนักในทุกตำแหน่งของแพ็กเก็ต (เริ่มจาก Index 2 เพื่อข้าม Header)
+              for (let i = 2; i < rawData.length - 1; i++) {
+                let wBig = (rawData[i] << 8) | rawData[i + 1];       // แบบเดินหน้า
+                let wLittle = (rawData[i + 1] << 8) | rawData[i];   // แบบถอยหลัง
+
+                const evaluateWeight = (val: number, endian: string) => {
+                  let kg1 = val * 0.01;
+                  let kg2 = val * 0.1;
+                  
+                  // ถ้าน้ำหนักตกอยู่ในช่วง 25 ถึง 200 กิโลกรัม (กันค่ามั่ว)
+                  if ((kg1 > 25 && kg1 < 200) || (kg2 > 25 && kg2 < 200)) {
+                    let finalKg = (kg1 > 25 && kg1 < 200) ? kg1.toFixed(2) : kg2.toFixed(1);
+                    console.log(`🎉 BINGO! เจอค่าน้ำหนักที่ Index ${i} (${endian}): ${finalKg} kg`);
+                    
+                    // ยิงค่าขึ้นหน้าจอ Kiosk ทันที!
+                    setVitals(prev => {
+                      const h = parseFloat(prev.height) / 100;
+                      return { 
+                        ...prev, 
+                        weight: parseFloat(finalKg).toFixed(1), 
+                        bmi: h > 0 ? (parseFloat(finalKg) / (h * h)).toFixed(2) : '---' 
+                      };
+                    });
+                  }
+                };
+
+                evaluateWeight(wBig, "เดินหน้า");
+                evaluateWeight(wLittle, "ถอยหลัง");
               }
             } catch (err) {
-              console.error("Data Parsing Error:", err);
+              console.error("Parse Error:", err);
             }
           });
         }
       }
       
-      alert(`✅ เชื่อมต่อเครื่องชั่ง BODYA สำเร็จ!`);
-      updateDeviceName('weight', device.name || 'BODYA Scale');
+      alert(`✅ เชื่อมต่อเครื่องชั่ง ALLWELL สำเร็จ! ขึ้นไปชั่งได้เลยครับ`);
+      updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
       console.error("Weight Error:", error); 
