@@ -431,26 +431,45 @@ function App() {
           await characteristic.startNotifications();
           console.log("✅ เริ่มดักฟังท่อ:", characteristic.uuid);
           
+          const connectBluetoothWeight = async () => {
+    try {
+      const device = await navigator.bluetooth.requestDevice({ 
+        acceptAllDevices: true, 
+        optionalServices: [0xA602] 
+      });
+      
+      const server = await device.gatt?.connect();
+      const service = await server?.getPrimaryService(0xA602);
+      const characteristics = await service?.getCharacteristics();
+
+      // วนลูปดักฟังทุกท่อ
+      for (const characteristic of characteristics || []) {
+        if (characteristic.properties.notify || characteristic.properties.indicate) {
+          await characteristic.startNotifications();
+          
           characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
             try {
               const value = event.target.value;
               const rawData = new Uint8Array(value.buffer);
               
-              if (rawData.length >= 6) {
-                // คำนวณหาค่าน้ำหนัก
-                let w1 = ((rawData[1] << 8) | rawData[2]); 
-                let w2 = ((rawData[2] << 8) | rawData[3]);
-                let w3 = ((rawData[4] << 8) | rawData[5]); // 🎯 เป้าหมายหลัก (ตำแหน่ง 4 และ 5)
-                let w4 = ((rawData[5] << 8) | rawData[6]);
-                
-                // พิมพ์ Log ทิ้งไว้ใน Console (F12) เพื่อดูค่าตอนยืน
-                console.log(`RAW BYTES:`, rawData.join("-"));
-                console.log(`ลองดูว่าข้อไหนตรงกับน้ำหนักจริง :: 1: ${(w1*0.01).toFixed(2)} | 2: ${(w2*0.01).toFixed(2)} | 3: ${(w3*0.01).toFixed(2)} | 4: ${(w4*0.01).toFixed(2)}`);
+              // แปลงข้อมูลเป็นเลขฐาน 16 เพื่อให้ดูง่ายขึ้น
+              const hexString = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+              
+              // 🕵️‍♂️ พิสูจน์หลักฐาน: พิมพ์บอกเลยว่าข้อมูลมาจาก "ท่อไหน"
+              const pipeId = event.target.uuid.split('-')[0]; // ดึงมาแค่รหัส 8 ตัวหน้า
+              console.log(`📡 [ท่อ ${pipeId}] ข้อมูล: ${hexString}`);
 
-                // เปลี่ยนมาใช้ w3 เป็นตัวจริง (เพราะค่าเริ่มต้นมันคือ 0.0)
+              if (rawData.length >= 6) {
+                // คำนวณน้ำหนักจากสูตร 3 (ตำแหน่งที่ 4 และ 5)
+                let w3 = ((rawData[4] << 8) | rawData[5]); 
                 let weight = (w3 * 0.01).toFixed(1); 
                 
-                // 🛡️ กรองข้อมูล: อัปเดตหน้าจอเฉพาะตอนที่น้ำหนักเกิน 5 kg ขึ้นไป
+                // ถ้าน้ำหนักเปลี่ยน ให้แสดงใน Console ด้วย
+                if (parseFloat(weight) > 0) {
+                   console.log(`⚖️ คำนวณน้ำหนักได้: ${weight} kg จากท่อ ${pipeId}`);
+                }
+                
+                // อัปเดตขึ้นจอ Kiosk ถ้าน้ำหนักเกิน 5 กิโล
                 if (parseFloat(weight) > 5.0) {
                   setVitals(prev => {
                     const h = parseFloat(prev.height) / 100;
@@ -466,6 +485,17 @@ function App() {
               console.error("Data Parsing Error:", err);
             }
           });
+        }
+      }
+      
+      alert(`✅ เชื่อมต่อสำเร็จ!`);
+      updateDeviceName('weight', device.name || 'BODYA Scale');
+      
+    } catch (error) { 
+      console.error("Weight Error:", error); 
+      alert('❌ ยกเลิกหรืออุปกรณ์มีปัญหา'); 
+    }
+  };
 
   const connectBluetoothTemp = async () => {
     try {
