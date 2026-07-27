@@ -410,6 +410,8 @@ function App() {
   };
 
   const connectBluetoothWeight = async () => {
+    let loopInterval: NodeJS.Timeout | null = null; 
+
     try {
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
@@ -421,81 +423,113 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 [God-Tier] ระบบ Profile Handshake พร้อมเจรจา!");
+      console.log("🚀 [Architect Mode] ปิดตายบั๊ก 41.06 พร้อมดึงน้ำหนักจริง!");
 
-      const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
-      const writePipe = characteristics?.find(c => c.properties.write || c.properties.writeWithoutResponse);
-
-      const processData = async (rawData: Uint8Array) => {
+      const processData = (rawData: Uint8Array) => {
         const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        
+        // กรองขยะสถานะ 0.00 kg ทิ้ง จะได้ไม่รกจอ
+        if (hexStr.includes("00 00 00 00 00 00 00 00")) return;
 
-        if (hexStr.includes("00 00 00 00 00 00 00 00")) return; // กรองขยะทิ้ง
+        console.log(`📦 ข้อมูลดิบจากเครื่องชั่ง: ${hexStr}`);
 
-        console.log(`📥 ข้อมูลจากเครื่องชั่ง: ${hexStr}`);
+        let foundWeight: string | null = null;
 
-        // 🎯 THE GOLDEN KEY: ถ้าเครื่องชั่งส่ง 00 01 02 มาขอดูข้อมูล
-        if (rawData.length === 3 && rawData[0] === 0x00 && rawData[1] === 0x01 && rawData[2] === 0x02) {
-          console.log("🔥 เครื่องชั่งขอมวลร่างกาย! กำลังส่ง Profile จำลองไปปลดล็อค...");
-          
-          if (writePipe) {
-            // รหัสปลดล็อคจำลอง: [คำสั่ง, ID 1, ชาย, อายุ 30, สูง 170cm, 0, 0, 0]
-            const profileCmd = new Uint8Array([0xFE, 0x01, 0x01, 0x1E, 0xAA, 0x00, 0x00, 0x00]);
-            try {
-              if (writePipe.properties.writeWithoutResponse) await writePipe.writeValueWithoutResponse(profileCmd);
-              else await writePipe.writeValue(profileCmd);
-              console.log("✅ ส่ง Profile สำเร็จ! เครื่องชั่งกำลังคายน้ำหนักจริงออกมา...");
-            } catch (e) {
-              console.error("ยิง Profile ไม่ผ่าน", e);
-            }
-          }
-          return; // จบการทำงานรอบนี้ รอรับแพ็กเก็ตถัดไป
+        // 🎯 กฎที่ 1: ดักจับแพ็กเก็ตมวลกายเต็มรูปแบบ (19 Byte) ที่เราเคยเจาะได้ 72.45 kg
+        if (rawData.length >= 19 && rawData[0] === 0x10 && rawData[1] === 0x11) {
+           let val = (rawData[10] << 8) | rawData[11];
+           let kg = (val * 0.01).toFixed(2);
+           if (parseFloat(kg) > 30.0) foundWeight = kg;
+        }
+        // 🎯 กฎที่ 2: ดักจับแพ็กเก็ต Live Data (12 Byte)
+        else if (rawData.length >= 6 && rawData[0] === 0x10 && rawData[1] === 0x0a) {
+           let val = (rawData[4] << 8) | rawData[5];
+           let kg = (val * 0.01).toFixed(2);
+           if (parseFloat(kg) > 30.0) foundWeight = kg;
         }
 
-        // 🎯 รับน้ำหนักที่แท้จริง (หลังจากส่ง Profile สำเร็จ)
-        if (rawData.length >= 6) {
-           let foundWeight: string | null = null;
-
-           // สแกนหาตัวเลขน้ำหนัก (กันประวัติเก่า 92.17 เข้ามาแทรก)
-           for (let i = 0; i < rawData.length - 1; i++) {
+        // 🎯 กฎที่ 3: สแกนแบบปูพรม (เริ่มที่ Byte 2 เพื่อข้ามหัวแพ็กเก็ต 10 0a ป้องกันเลข 41.06 โผล่มาอีก)
+        if (!foundWeight) {
+           for (let i = 2; i < rawData.length - 1; i++) {
+             // แบบเดินหน้า
              let valBig = (rawData[i] << 8) | rawData[i + 1];
              let kgBig = (valBig * 0.01).toFixed(2);
-             
-             // ล็อคให้โชว์เฉพาะน้ำหนักที่สมเหตุสมผล
              if (parseFloat(kgBig) > 30.0 && parseFloat(kgBig) < 150.0) {
-               foundWeight = kgBig;
+               foundWeight = kgBig; break;
+             }
+             // แบบถอยหลัง
+             let valLittle = (rawData[i + 1] << 8) | rawData[i];
+             let kgLittle = (valLittle * 0.01).toFixed(2);
+             if (parseFloat(kgLittle) > 30.0 && parseFloat(kgLittle) < 150.0) {
+               foundWeight = kgLittle; break;
              }
            }
+        }
 
-           if (foundWeight) {
-              console.log(`🎉 [BINGO!] รับค่าน้ำหนักล่าสุดสำเร็จ: ${foundWeight} kg`);
-              
-              setVitals(prev => {
-                if (prev.weight === foundWeight) return prev; // กันจอกระพริบ
-                const h = parseFloat(prev.height) / 100;
-                return { 
-                  ...prev, 
-                  weight: foundWeight!.toString(), 
-                  bmi: h > 0 ? (parseFloat(foundWeight!) / (h * h)).toFixed(2) : '---' 
-                };
-              });
-           }
+        if (foundWeight) {
+           console.log(`🎉 [BINGO!] ล็อคค่าน้ำหนักจริงสำเร็จ: ${foundWeight} kg`);
+           setVitals(prev => {
+              if (prev.weight === foundWeight) return prev; // กันหน้าจอกระพริบ
+              const h = parseFloat(prev.height) / 100;
+              return { 
+                ...prev, 
+                weight: foundWeight!.toString(), 
+                bmi: h > 0 ? (parseFloat(foundWeight!) / (h * h)).toFixed(2) : '---' 
+              };
+           });
         }
       };
 
-      // เปิดหูรับฟังข้อมูล
+      const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
+      const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
+
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
-          char.addEventListener('characteristicvaluechanged', (event: any) => {
-            processData(new Uint8Array(event.target.value.buffer));
+          char.addEventListener('characteristicvaluechanged', (e: any) => {
+            processData(new Uint8Array(e.target.value.buffer));
           });
         } catch (e) {}
       }
 
-      alert(`✅ ระบบพร้อม 100%! ก้าวขึ้นชั่งได้เลยครับ`);
+      // 🔑 รหัสกระชากข้อมูล: ส่งคำสั่งครบทั้ง 4 ชุด เพื่อบังคับให้เครื่องคายน้ำหนักล็อคล่าสุดออกมา!
+      const wakeUpCommands = [
+        new Uint8Array([0xFD, 0x37]),  
+        new Uint8Array([0x00, 0x00]),  
+        new Uint8Array([0x03, 0x00]),  
+        new Uint8Array([0x10, 0x00, 0x00, 0x00]) 
+      ];
+
+      for (const char of writePipes) {
+        for (const cmd of wakeUpCommands) {
+           try {
+             if (char.properties.writeWithoutResponse) await char.writeValueWithoutResponse(cmd);
+             else await char.writeValue(cmd);
+           } catch(e) { }
+        }
+      }
+
+      // 💓 ระบบหล่อเลี้ยงสัญญาณ
+      const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
+      if (mainWritePipe) {
+         loopInterval = setInterval(async () => {
+            try {
+              const ping = new Uint8Array([0x00]); 
+              if (mainWritePipe.properties.writeWithoutResponse) await mainWritePipe.writeValueWithoutResponse(ping);
+              else await mainWritePipe.writeValue(ping);
+            } catch(e) {}
+         }, 1000); 
+      }
+
+      device.addEventListener('gattserverdisconnected', () => {
+        if (loopInterval) clearInterval(loopInterval);
+      });
+
+      alert(`✅ อัปเดตแพทช์ปิดตายบั๊ก 41.06 เรียบร้อย! ก้าวขึ้นชั่งได้เลยครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
 
     } catch (error) {
+      if (loopInterval) clearInterval(loopInterval);
       console.error("BLE Error:", error);
     }
   };
