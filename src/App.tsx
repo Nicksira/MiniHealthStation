@@ -437,29 +437,21 @@ function App() {
               const rawData = new Uint8Array(value.buffer);
               
               if (rawData.length >= 6) {
-                // 🕵️‍♂️ SPY MODE: ระบบเรดาร์กวาดหาข้อมูล Byte ทุกตัว
+                // คำนวณหาค่าน้ำหนัก
                 let w1 = ((rawData[1] << 8) | rawData[2]); 
                 let w2 = ((rawData[2] << 8) | rawData[3]);
-                let w3 = ((rawData[4] << 8) | rawData[5]);
+                let w3 = ((rawData[4] << 8) | rawData[5]); // 🎯 เป้าหมายหลัก (ตำแหน่ง 4 และ 5)
                 let w4 = ((rawData[5] << 8) | rawData[6]);
-                let w5 = ((rawData[2] << 8) | rawData[1]); // Little Endian
-                let w6 = ((rawData[3] << 8) | rawData[2]); // Little Endian
                 
-                console.group("🔍 ระบบเรดาร์ค้นหาน้ำหนัก (Spy Mode)");
-                console.log(`📌 น้ำหนักบนเครื่องชั่งจริงคือเท่าไหร่ ให้ดูว่าตรงกับสูตรไหนที่สุดครับ`);
-                console.log(`สูตร 1: ${(w1 * 0.01).toFixed(2)} kg หรือ ${(w1 * 0.1).toFixed(1)} kg`);
-                console.log(`สูตร 2: ${(w2 * 0.01).toFixed(2)} kg หรือ ${(w2 * 0.1).toFixed(1)} kg`);
-                console.log(`สูตร 3: ${(w3 * 0.01).toFixed(2)} kg หรือ ${(w3 * 0.1).toFixed(1)} kg`);
-                console.log(`สูตร 4: ${(w4 * 0.01).toFixed(2)} kg หรือ ${(w4 * 0.1).toFixed(1)} kg`);
-                console.log(`สูตร 5: ${(w5 * 0.01).toFixed(2)} kg หรือ ${(w5 * 0.1).toFixed(1)} kg`);
-                console.log(`สูตร 6: ${(w6 * 0.01).toFixed(2)} kg หรือ ${(w6 * 0.1).toFixed(1)} kg`);
-                console.log("📦 RAW BYTES:", rawData.join(" "));
-                console.groupEnd();
+                // พิมพ์ Log ทิ้งไว้ใน Console (F12) เพื่อดูค่าตอนยืน
+                console.log(`RAW BYTES:`, rawData.join("-"));
+                console.log(`ลองดูว่าข้อไหนตรงกับน้ำหนักจริง :: 1: ${(w1*0.01).toFixed(2)} | 2: ${(w2*0.01).toFixed(2)} | 3: ${(w3*0.01).toFixed(2)} | 4: ${(w4*0.01).toFixed(2)}`);
+
+                // เปลี่ยนมาใช้ w3 เป็นตัวจริง (เพราะค่าเริ่มต้นมันคือ 0.0)
+                let weight = (w3 * 0.01).toFixed(1); 
                 
-                // ชั่วคราว: เอาค่าสูตร 2 ไปแสดงบนจอก่อน (แบรนด์จีนส่วนใหญ่ใช้ตำแหน่งนี้)
-                let weight = (w2 * 0.01).toFixed(1); 
-                
-                if (parseFloat(weight) > 2.0) {
+                // 🛡️ กรองข้อมูล: อัปเดตหน้าจอเฉพาะตอนที่น้ำหนักเกิน 5 kg ขึ้นไป
+                if (parseFloat(weight) > 5.0) {
                   setVitals(prev => {
                     const h = parseFloat(prev.height) / 100;
                     return { 
