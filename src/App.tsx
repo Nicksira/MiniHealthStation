@@ -423,52 +423,18 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 [God-Mode] ปลดล็อกทุกตัวกรอง สแกนทะลุทุกไบต์!");
+      console.log("🚀 [Naked Matrix Mode] เปิดระบบดู Raw Data เพียวๆ ไร้การคำนวณ!");
 
+      // 🧠 ฟังก์ชันปริ้น Raw Hex เปล่าๆ
       const processWeightData = (rawData: Uint8Array) => {
         const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
 
-        // บล็อกเฉพาะแพ็กเก็ตที่เป็น 0.00 ล้วนๆ จะได้ไม่รกหน้าต่าง Console
+        // กรองเฉพาะพวก Heartbeat ที่เป็น 0.00 ทิ้งไป จะได้ดูง่ายๆ
         if (hexStr.includes("00 00 00 00 00 00 00 00")) return;
+        if (hexStr.includes("10 0a 00 07 00 00 00 00")) return;
 
-        console.log(`📦 ข้อมูลดิบเข้า: ${hexStr}`);
-
-        let latestFoundWeight: string | null = null;
-
-        // สแกนเจาะตัวเลขทุกคู่ ทั้งแบบซ้ายไปขวา และ ขวาไปซ้าย
-        for (let i = 0; i < rawData.length - 1; i++) {
-          
-          // 1. ลองอ่านแบบ Big-Endian (เดินหน้า)
-          let valBig = (rawData[i] << 8) | rawData[i + 1];
-          let kgBig = (valBig * 0.01).toFixed(2);
-          
-          if (parseFloat(kgBig) > 30.0 && parseFloat(kgBig) < 150.0) {
-            latestFoundWeight = kgBig;
-            console.log(`🔥 เจอค่าน้ำหนัก: ${kgBig} kg (แบบเดินหน้า ไบต์ ${i})`);
-          }
-
-          // 2. ลองอ่านแบบ Little-Endian (ถอยหลัง)
-          let valLittle = (rawData[i + 1] << 8) | rawData[i];
-          let kgLittle = (valLittle * 0.01).toFixed(2);
-          
-          if (parseFloat(kgLittle) > 30.0 && parseFloat(kgLittle) < 150.0 && kgLittle !== kgBig) {
-            latestFoundWeight = kgLittle;
-            console.log(`🔥 เจอค่าน้ำหนัก: ${kgLittle} kg (แบบถอยหลัง ไบต์ ${i})`);
-          }
-        }
-
-        // ถ้างัดค่าน้ำหนักออกมาได้สำเร็จ ยิงขึ้นจอทันที! (ค่าใหม่จะทับค่าเก่าอัตโนมัติ)
-        if (latestFoundWeight) {
-           setVitals(prev => {
-              if (prev.weight === latestFoundWeight?.toString()) return prev; // กันจอกระพริบ
-              const h = parseFloat(prev.height) / 100;
-              return { 
-                ...prev, 
-                weight: latestFoundWeight!.toString(), 
-                bmi: h > 0 ? (parseFloat(latestFoundWeight!) / (h * h)).toFixed(2) : '---' 
-              };
-           });
-        }
+        // ปริ้นสิ่งที่เครื่องชั่งส่งมาทั้งหมด!
+        console.log(`📦 [RAW HEX] -> ${hexStr}`);
       };
 
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
@@ -483,12 +449,10 @@ function App() {
         } catch (e) {}
       }
 
-      // 🔑 ใส่กลับรหัสปลุกแบบจัดเต็ม 4 ชุด (ชุดเดียวกับที่เคยทำให้เครื่องคายข้อมูลประวัติออกมาได้)
+      // 🔑 ส่งรหัสแค่การ Bind ไม่ขอดึงประวัติเก่า
       const wakeUpCommands = [
         new Uint8Array([0xFD, 0x37]),  
-        new Uint8Array([0x00, 0x00]),  
-        new Uint8Array([0x03, 0x00]),  
-        new Uint8Array([0x10, 0x00, 0x00, 0x00]) 
+        new Uint8Array([0x01, 0x00])   
       ];
 
       for (const char of writePipes) {
@@ -513,15 +477,13 @@ function App() {
 
       device.addEventListener('gattserverdisconnected', () => {
         if (loopInterval) clearInterval(loopInterval);
-        console.log("❌ อุปกรณ์ตัดสาย");
       });
 
-      alert(`✅ โหมดปลดล็อกไร้ตัวกรองทำงาน! กรุณาก้าวขึ้นชั่งน้ำหนัก`);
+      alert(`✅ โหมด Naked Matrix ทำงาน! กรุณาชั่งน้ำหนัก`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
       
     } catch (error) { 
       if (loopInterval) clearInterval(loopInterval);
-      console.error("BLE Error:", error); 
     }
   };
 
