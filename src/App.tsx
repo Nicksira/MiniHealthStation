@@ -410,7 +410,7 @@ function App() {
   };
 
   const connectBluetoothWeight = async () => {
-    let loopInterval: NodeJS.Timeout | null = null;
+    let loopInterval: NodeJS.Timeout | null = null; 
 
     try {
       const device = await navigator.bluetooth.requestDevice({ 
@@ -423,59 +423,34 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 [App Clone Mode] จำลองพฤติกรรมแอพ ALLWELL พร้อมทำงาน!");
+      console.log("🚀 [Proactive Mode] เลียนแบบแอพ ALLWELL: ชิงส่งโปรไฟล์ล่วงหน้า!");
 
-      const writePipe = characteristics?.find(c => c.properties.write || c.properties.writeWithoutResponse);
-
-      const processData = async (rawData: Uint8Array) => {
+      const processData = (rawData: Uint8Array) => {
         const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        
+        // ซ่อนแพ็กเก็ตที่เป็น 0.00 kg เพื่อไม่ให้รกหน้าจอ (10 0a 00 07 00 00)
+        if (hexStr.includes("10 0a 00 07 00 00")) return; 
+        if (hexStr.includes("00 00 00 00 00 00")) return;
 
-        // ซ่อนแพ็กเก็ตที่เป็น 0.00 kg เพื่อให้ดูง่าย
-        if (hexStr.includes("10 0a 00 07 00 00 00 00")) return; 
+        console.log(`📥 ข้อมูลลอยมา: ${hexStr}`);
 
-        console.log(`📥 ข้อมูลจากเครื่องชั่ง: ${hexStr}`);
-
-        // ========================================================
-        // 🎯 THE GOLDEN HANDSHAKE: เมื่อเครื่องชั่งขอดูโปรไฟล์ (00 01 02)
-        // ========================================================
-        if (rawData.length === 3 && rawData[0] === 0x00 && rawData[1] === 0x01 && rawData[2] === 0x02) {
-          console.log("🔥 เครื่องชั่งร้องขอโปรไฟล์! กำลังยิงโปรไฟล์จำลองไปปลดล็อค...");
-          
-          if (writePipe) {
-            // สร้าง Profile จำลอง: [คำสั่ง, ID 1, เพศชาย(01), อายุ 30(1E), สูง 170cm(AA), 00, 00, 00]
-            const profileCmd = new Uint8Array([0xFE, 0x01, 0x01, 0x1E, 0xAA, 0x00, 0x00, 0x00]);
-            try {
-              if (writePipe.properties.writeWithoutResponse) await writePipe.writeValueWithoutResponse(profileCmd);
-              else await writePipe.writeValue(profileCmd);
-              console.log("✅ ยิงโปรไฟล์สำเร็จ! รอรับน้ำหนักที่แท้จริง...");
-            } catch (e) {
-              console.error("❌ ยิงโปรไฟล์ไม่ผ่าน", e);
-            }
-          }
-          return; 
-        }
-
-        // ========================================================
-        // 🎯 สกัดค่าน้ำหนักที่แท้จริง (หลบหลีกบั๊ก 41.06 อย่างสมบูรณ์)
-        // ========================================================
         let weight = 0;
 
+        // 🎯 สแกนหาแพ็กเก็ตน้ำหนักที่แท้จริง
         if (rawData.length >= 12 && rawData[0] === 0x10) {
-           // กรณีที่ 1: แพ็กเก็ตมวลร่างกายเต็มรูปแบบ (มักขึ้นต้นด้วย 10 11)
+           // แบบที่ 1: แพ็กเก็ตมวลร่างกาย (10 11 ...) ซ่อนอยู่ที่ไบต์ 10,11
            if (rawData[1] === 0x11 || rawData.length >= 19) {
-              let val = (rawData[10] << 8) | rawData[11];
-              weight = val * 0.01;
+              weight = ((rawData[10] << 8) | rawData[11]) * 0.01;
            } 
-           // กรณีที่ 2: แพ็กเก็ตน้ำหนักสด (มักขึ้นต้นด้วย 10 0a)
+           // แบบที่ 2: แพ็กเก็ต Live Data (10 0a ...) ซ่อนอยู่ที่ไบต์ 4,5
            else if (rawData[1] === 0x0a) {
-              let val = (rawData[4] << 8) | rawData[5];
-              weight = val * 0.01;
+              weight = ((rawData[4] << 8) | rawData[5]) * 0.01;
            }
         }
 
-        // ถ้าน้ำหนักสมเหตุสมผล ให้อัปเดตขึ้นหน้าจอ Kiosk ทันที!
+        // ถ้าน้ำหนักเกิน 5 กิโลกรัม ยิงขึ้นจอเลย!
         if (weight > 5.0 && weight < 250.0) {
-           console.log(`🎉 [BINGO!] ปลดล็อคค่าน้ำหนักสำเร็จ: ${weight.toFixed(2)} kg`);
+           console.log(`🎉 [BINGO!] ได้ค่าน้ำหนักจริง: ${weight.toFixed(2)} kg`);
            
            setVitals(prev => {
               if (prev.weight === weight.toFixed(2)) return prev; 
@@ -490,8 +465,9 @@ function App() {
       };
 
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
+      const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
 
-      // 🎧 เปิดระบบรับฟัง
+      // 🎧 1. เปิดรับฟังข้อมูล
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
@@ -501,21 +477,40 @@ function App() {
         } catch (e) {}
       }
 
-      // 🔑 ส่งรหัสเริ่มต้นเพื่อปลุกตราชั่ง
-      if (writePipe) {
-        const startCmd = new Uint8Array([0xFD, 0x37]);
-        try {
-          if (writePipe.properties.writeWithoutResponse) await writePipe.writeValueWithoutResponse(startCmd);
-          else await writePipe.writeValue(startCmd);
-        } catch (e) {}
+      // 🔑 2. ลำดับคำสั่งเจาะระบบ (ปลุก -> ส่งโปรไฟล์ -> ขอข้อมูล)
+      const commands = [
+        new Uint8Array([0xFD, 0x37]), // 1. ปลุกเครื่องชั่ง
+        new Uint8Array([0xFE, 0x01, 0x01, 0x1E, 0xAA, 0x00, 0x00, 0x00]), // 2. ยิง Profile (ชาย, 30ปี, 170cm) แบบที่แอพทำ!
+        new Uint8Array([0x01, 0x00])  // 3. ขอเริ่มสตรีมข้อมูล
+      ];
+
+      for (const char of writePipes) {
+        for (const cmd of commands) {
+           try {
+             if (char.properties.writeWithoutResponse) await char.writeValueWithoutResponse(cmd);
+             else await char.writeValue(cmd);
+           } catch(e) { }
+        }
+      }
+
+      // 💓 3. ระบบ Ping เลี้ยงสัญญาณ ป้องกันเครื่องชั่งหลับ
+      const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
+      if (mainWritePipe) {
+         loopInterval = setInterval(async () => {
+            try {
+              const ping = new Uint8Array([0x00]); 
+              if (mainWritePipe.properties.writeWithoutResponse) await mainWritePipe.writeValueWithoutResponse(ping);
+              else await mainWritePipe.writeValue(ping);
+            } catch(e) {}
+         }, 1000); // ยิงสะกิดทุก 1 วินาที
       }
 
       device.addEventListener('gattserverdisconnected', () => {
         if (loopInterval) clearInterval(loopInterval);
-        console.log("❌ อุปกรณ์ตัดการเชื่อมต่อ");
+        console.log("❌ อุปกรณ์ตัดสาย");
       });
 
-      alert(`✅ ระบบ App Clone สแตนด์บาย! ขึ้นชั่งได้เลยครับ`);
+      alert(`✅ ส่งโปรไฟล์ล่วงหน้าสำเร็จ! ก้าวขึ้นชั่งน้ำหนักได้เลยครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
 
     } catch (error) {
