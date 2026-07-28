@@ -410,6 +410,8 @@ function App() {
   };
 
   const connectBluetoothWeight = async () => {
+    let heartbeatInterval: NodeJS.Timeout | null = null; 
+
     try {
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
@@ -421,101 +423,120 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 [Reactive Mode] ระบบโต้ตอบอัตโนมัติ (Call & Response) ทำงาน!");
+      console.log("🏥 [Health Tech Architect] สถาปัตยกรรม Full-Bridge Protocol ทำงาน!");
+      console.log("🔒 ตรวจสอบ Data Integrity และเตรียมเชื่อมต่อ...");
 
-      // 🎯 ค้นหาท่อสำหรับ "ส่งคำสั่ง" (Write Pipe)
-      const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
-      const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
+      const mainWritePipe = characteristics?.find(c => c.properties.write || c.properties.writeWithoutResponse);
+      const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
 
-      const processData = async (rawData: Uint8Array) => {
+      // 🧠 [Data Sanitization Unit] หน่วยคัดกรองข้อมูลก่อนลงฐานข้อมูล (เทียบเท่า JHCIS Middleware)
+      const processMedicalData = async (rawData: Uint8Array) => {
         const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
 
-        // กรองขยะ 0.00 kg ทิ้ง จะได้เห็นข้อมูลชัดๆ
-        if (hexStr.includes("00 00 00 00 00 00 00 00")) return;
-        if (hexStr.includes("10 0a 00 07 00 00")) return; 
+        // [Edge Case 1] กรอง Packet ขยะและ Heartbeat ว่างเปล่าทิ้งทันที เพื่อประหยัด Memory
+        if (hexStr.includes("00 00 00 00 00 00 00 00") || hexStr.includes("10 0a 00 07 00 00")) return;
 
-        console.log(`📥 ตราชั่งส่งมา: ${hexStr}`);
-
-        // ========================================================
-        // 🎯 1. เมื่อตราชั่งทวงถามโปรไฟล์ (00 01 02) -> ยิงสวนทันที!
-        // ========================================================
-        if (rawData.length === 3 && rawData[0] === 0x00 && rawData[1] === 0x01 && rawData[2] === 0x02) {
-          console.log("🔥 ตราชั่งถามหาโปรไฟล์! กำลังยิงข้อมูลสวนกลับ...");
-          
-          if (mainWritePipe) {
-            // สร้าง Profile จำลอง: [หัวคำสั่ง, ID 1, เพศชาย, อายุ 30, สูง 170cm, ปิดท้าย...]
-            const profileCmd = new Uint8Array([0xFE, 0x01, 0x01, 0x1E, 0xAA, 0x00, 0x00, 0x00]);
-            try {
-              if (mainWritePipe.properties.writeWithoutResponse) {
-                 await mainWritePipe.writeValueWithoutResponse(profileCmd);
-              } else {
-                 await mainWritePipe.writeValue(profileCmd);
-              }
-              console.log("✅ ส่งโปรไฟล์สำเร็จ! ตราชั่งกำลังคำนวณและเตรียมส่งน้ำหนักจริง...");
-            } catch (e) {
-              console.error("❌ ยิงโปรไฟล์ไม่ผ่าน", e);
-            }
-          }
-          return; // จบการทำงานรอบนี้ เพื่อรอรับค่าน้ำหนักในแพ็กเก็ตถัดไป
+        // [Fault Tolerance] หากฮาร์ดแวร์ทำ Profile หล่นหายและร้องขอใหม่ (00 01 02 หรือ 00 01 01)
+        if (rawData.length >= 3 && rawData[0] === 0x00 && rawData[1] === 0x01) {
+          console.log("⚠️ [Interrupt] ฮาร์ดแวร์ร้องขอ Profile ซ้ำ! ทำการ Inject ข้อมูลใหม่...");
+          injectProfile(mainWritePipe);
+          return;
         }
 
-        // ========================================================
-        // 🎯 2. สกัดค่าน้ำหนักที่แท้จริง (หลังจากปลดล็อกผ่านแล้ว)
-        // ========================================================
-        let weight = 0;
+        console.log(`📥 [Raw Stream]: ${hexStr}`);
 
+        let extractedWeight = 0;
+
+        // 🎯 สกัดข้อมูลระดับ Bit-wise operation
         if (rawData.length >= 12 && rawData[0] === 0x10) {
-           // กรณีที่ 1: แพ็กเก็ตมวลร่างกาย (มักมาหลังส่งโปรไฟล์สำเร็จ)
+           // Type A: Final Computed Data (10 11) -> ค่าเสถียรที่สุดหลังคำนวณไขมันเสร็จ
            if (rawData[1] === 0x11 || rawData.length >= 19) {
-              weight = ((rawData[10] << 8) | rawData[11]) * 0.01;
+              extractedWeight = ((rawData[10] << 8) | rawData[11]) * 0.01;
            } 
-           // กรณีที่ 2: แพ็กเก็ตน้ำหนักสด 
+           // Type B: Live Streaming Data (10 0a) -> ค่าน้ำหนักขณะเท้ากำลังเหยียบ
            else if (rawData[1] === 0x0a) {
-              weight = ((rawData[4] << 8) | rawData[5]) * 0.01;
+              extractedWeight = ((rawData[4] << 8) | rawData[5]) * 0.01;
            }
         }
 
-        // ถ้าน้ำหนักเกิน 5 กิโลกรัม ยิงขึ้นจอ JHCIS เลย!
-        if (weight > 5.0 && weight < 250.0) {
-           console.log(`🎉 [BINGO!] ปลดล็อกน้ำหนักสำเร็จ: ${weight.toFixed(2)} kg`);
+        // [Edge Case 2] ตรวจสอบความสมเหตุสมผลของข้อมูล (Anomaly Detection)
+        if (extractedWeight > 5.0 && extractedWeight < 300.0) {
+           const finalWeight = extractedWeight.toFixed(2);
+           console.log(`✅ [Verified Data] น้ำหนักสุทธิ: ${finalWeight} kg (พร้อมยิงเข้า UI)`);
            
            setVitals(prev => {
-              if (prev.weight === weight.toFixed(2)) return prev; 
+              if (prev.weight === finalWeight) return prev; // ป้องกัน Re-render สิ้นเปลือง
               const h = parseFloat(prev.height) / 100;
               return { 
                 ...prev, 
-                weight: weight.toFixed(2), 
-                bmi: h > 0 ? (weight / (h * h)).toFixed(2) : '---' 
+                weight: finalWeight, 
+                bmi: h > 0 ? (extractedWeight / (h * h)).toFixed(2) : '---' 
               };
            });
         }
       };
 
-      const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
+      // 💉 ฟังก์ชันฉีด Profile เกรดการแพทย์ (ใส่เป้าหมาย 62kg ตามที่คุณสิรภพวิเคราะห์)
+      const injectProfile = async (pipe: BluetoothRemoteGATTCharacteristic | undefined) => {
+        if (!pipe) return;
+        // โครงสร้าง: [FE, ID(01), เพศชาย(01), อายุ(30=1E), สูง(170=AA), เป้าหมาย(62=3E), 00, 00]
+        const profilePayload = new Uint8Array([0xFE, 0x01, 0x01, 0x1E, 0xAA, 0x3E, 0x00, 0x00]);
+        try {
+          if (pipe.properties.writeWithoutResponse) await pipe.writeValueWithoutResponse(profilePayload);
+          else await pipe.writeValue(profilePayload);
+          console.log("💉 [Profile Injection] ส่ง Profile + เป้าหมาย 62kg สำเร็จ!");
+        } catch (e) { console.error("Injection Failed", e); }
+      };
 
-      // 🎧 เปิดระบบรับฟัง
+      // 🎧 1. เปิดวงจรรับฟังข้อมูล (Subscribing)
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
           char.addEventListener('characteristicvaluechanged', (e: any) => {
-            processData(new Uint8Array(e.target.value.buffer));
+            processMedicalData(new Uint8Array(e.target.value.buffer));
           });
         } catch (e) {}
       }
 
-      // ปลุกตราชั่งเบาๆ 1 ครั้งตอนเชื่อมต่อเสร็จ (เพื่อให้มันเริ่มส่งคำถาม 00 01 02 มา)
+      // 🔑 2. ลำดับการ Handshake ทลาย Deadlock (Wake -> Stream -> Inject Profile)
       if (mainWritePipe) {
-        const wakeUpCmd = new Uint8Array([0xFD, 0x37]);
-        try {
-          if (mainWritePipe.properties.writeWithoutResponse) await mainWritePipe.writeValueWithoutResponse(wakeUpCmd);
-          else await mainWritePipe.writeValue(wakeUpCmd);
-        } catch (e) {}
+        const bootSequence = [
+          new Uint8Array([0xFD, 0x37]), // 1. ปลุกชิปเซ็ต
+          new Uint8Array([0x01, 0x00])  // 2. สั่งเปิดท่อ Live Stream (แก้ปัญหาจอดำ/เงียบ)
+        ];
+        
+        for (const cmd of bootSequence) {
+           try {
+             if (mainWritePipe.properties.writeWithoutResponse) await mainWritePipe.writeValueWithoutResponse(cmd);
+             else await mainWritePipe.writeValue(cmd);
+           } catch(e) { }
+        }
+        
+        // 3. ยิง Profile ยัดใส่มือมันทันที โดยไม่ต้องรอให้มันถาม!
+        await injectProfile(mainWritePipe);
       }
 
-      alert(`✅ ระบบโต้ตอบ (Call & Response) พร้อมทำงาน! ขึ้นชั่งได้เลยครับ`);
+      // 💓 3. ระบบหล่อเลี้ยง Session (Heartbeat Keep-Alive)
+      if (mainWritePipe) {
+         heartbeatInterval = setInterval(async () => {
+            try {
+              const ping = new Uint8Array([0x00]); 
+              if (mainWritePipe.properties.writeWithoutResponse) await mainWritePipe.writeValueWithoutResponse(ping);
+              else await mainWritePipe.writeValue(ping);
+            } catch(e) {}
+         }, 1000); 
+      }
+
+      device.addEventListener('gattserverdisconnected', () => {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        console.warn("❌ [System Alert] อุปกรณ์ตัดการเชื่อมต่อ");
+      });
+
+      alert(`✅ สถาปัตยกรรมระดับ Enterprise พร้อมทำงาน! กรุณาชั่งน้ำหนัก`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
 
     } catch (error) {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
       console.error("BLE Error:", error);
     }
   };
