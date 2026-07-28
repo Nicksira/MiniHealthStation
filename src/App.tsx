@@ -410,8 +410,6 @@ function App() {
   };
 
   const connectBluetoothWeight = async () => {
-    let loopInterval: NodeJS.Timeout | null = null; 
-
     try {
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
@@ -423,53 +421,46 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🚀 [Architect Mode] ปิดตายบั๊ก 41.06 พร้อมดึงน้ำหนักจริง!");
+      console.log("👻 [Ghost Mode] โหมดไร้ตัวตน: ปิดคำสั่งรบกวน นั่งดักฟังเงียบๆ...");
 
       const processData = (rawData: Uint8Array) => {
         const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
         
-        // กรองขยะสถานะ 0.00 kg ทิ้ง จะได้ไม่รกจอ
+        // เมินแพ็กเก็ตที่ว่างเปล่า (0.00 kg) จะได้ไม่รก Console
         if (hexStr.includes("00 00 00 00 00 00 00 00")) return;
 
-        console.log(`📦 ข้อมูลดิบจากเครื่องชั่ง: ${hexStr}`);
+        console.log(`📡 [ข้อมูลลอยมาในอากาศ]: ${hexStr}`);
 
         let foundWeight: string | null = null;
 
-        // 🎯 กฎที่ 1: ดักจับแพ็กเก็ตมวลกายเต็มรูปแบบ (19 Byte) ที่เราเคยเจาะได้ 72.45 kg
-        if (rawData.length >= 19 && rawData[0] === 0x10 && rawData[1] === 0x11) {
-           let val = (rawData[10] << 8) | rawData[11];
-           let kg = (val * 0.01).toFixed(2);
-           if (parseFloat(kg) > 30.0) foundWeight = kg;
-        }
-        // 🎯 กฎที่ 2: ดักจับแพ็กเก็ต Live Data (12 Byte)
-        else if (rawData.length >= 6 && rawData[0] === 0x10 && rawData[1] === 0x0a) {
-           let val = (rawData[4] << 8) | rawData[5];
-           let kg = (val * 0.01).toFixed(2);
-           if (parseFloat(kg) > 30.0) foundWeight = kg;
-        }
+        // 🎯 AI สแกนเฉพาะตัวเลข (เริ่มสแกนจาก Index 2 เพื่อหลบหัวแพ็กเก็ต ป้องกันเลข 41.06 โผล่)
+        for (let i = 2; i < rawData.length - 1; i++) {
+           
+           // 1. อ่านแบบมาตรฐาน (Big-Endian)
+           let valBig = (rawData[i] << 8) | rawData[i + 1];
+           let kgBig = (valBig * 0.01).toFixed(2);
+           if (parseFloat(kgBig) >= 30.0 && parseFloat(kgBig) <= 150.0) {
+             foundWeight = kgBig; break;
+           }
+           
+           // 2. อ่านแบบสลับด้าน (Little-Endian)
+           let valLittle = (rawData[i + 1] << 8) | rawData[i];
+           let kgLittle = (valLittle * 0.01).toFixed(2);
+           if (parseFloat(kgLittle) >= 30.0 && parseFloat(kgLittle) <= 150.0) {
+             foundWeight = kgLittle; break;
+           }
 
-        // 🎯 กฎที่ 3: สแกนแบบปูพรม (เริ่มที่ Byte 2 เพื่อข้ามหัวแพ็กเก็ต 10 0a ป้องกันเลข 41.06 โผล่มาอีก)
-        if (!foundWeight) {
-           for (let i = 2; i < rawData.length - 1; i++) {
-             // แบบเดินหน้า
-             let valBig = (rawData[i] << 8) | rawData[i + 1];
-             let kgBig = (valBig * 0.01).toFixed(2);
-             if (parseFloat(kgBig) > 30.0 && parseFloat(kgBig) < 150.0) {
-               foundWeight = kgBig; break;
-             }
-             // แบบถอยหลัง
-             let valLittle = (rawData[i + 1] << 8) | rawData[i];
-             let kgLittle = (valLittle * 0.01).toFixed(2);
-             if (parseFloat(kgLittle) > 30.0 && parseFloat(kgLittle) < 150.0) {
-               foundWeight = kgLittle; break;
-             }
+           // 3. แผนสำรองสุดโต่ง: เผื่อเครื่องชั่งส่งมาเป็นตัวเลขตรงๆ (BCD) เช่น 69 30 = 69.30
+           let bcdStr = rawData[i].toString(16).padStart(2, '0') + "." + rawData[i+1].toString(16).padStart(2, '0');
+           if (parseFloat(bcdStr) >= 30.0 && parseFloat(bcdStr) <= 150.0) {
+             foundWeight = bcdStr; break;
            }
         }
 
         if (foundWeight) {
-           console.log(`🎉 [BINGO!] ล็อคค่าน้ำหนักจริงสำเร็จ: ${foundWeight} kg`);
+           console.log(`🎉 [BINGO!] ดึงน้ำหนักสดๆ สำเร็จ: ${foundWeight} kg`);
            setVitals(prev => {
-              if (prev.weight === foundWeight) return prev; // กันหน้าจอกระพริบ
+              if (prev.weight === foundWeight?.toString()) return prev; // กันจอกระพริบ
               const h = parseFloat(prev.height) / 100;
               return { 
                 ...prev, 
@@ -481,8 +472,8 @@ function App() {
       };
 
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
-      const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
 
+      // 🎧 เปิดรับฟังอย่างเดียว "ห้ามส่งคำสั่ง (Write) ใดๆ ทั้งสิ้น"
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
@@ -492,45 +483,12 @@ function App() {
         } catch (e) {}
       }
 
-      // 🔑 รหัสกระชากข้อมูล: ส่งคำสั่งครบทั้ง 4 ชุด เพื่อบังคับให้เครื่องคายน้ำหนักล็อคล่าสุดออกมา!
-      const wakeUpCommands = [
-        new Uint8Array([0xFD, 0x37]),  
-        new Uint8Array([0x00, 0x00]),  
-        new Uint8Array([0x03, 0x00]),  
-        new Uint8Array([0x10, 0x00, 0x00, 0x00]) 
-      ];
-
-      for (const char of writePipes) {
-        for (const cmd of wakeUpCommands) {
-           try {
-             if (char.properties.writeWithoutResponse) await char.writeValueWithoutResponse(cmd);
-             else await char.writeValue(cmd);
-           } catch(e) { }
-        }
-      }
-
-      // 💓 ระบบหล่อเลี้ยงสัญญาณ
-      const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
-      if (mainWritePipe) {
-         loopInterval = setInterval(async () => {
-            try {
-              const ping = new Uint8Array([0x00]); 
-              if (mainWritePipe.properties.writeWithoutResponse) await mainWritePipe.writeValueWithoutResponse(ping);
-              else await mainWritePipe.writeValue(ping);
-            } catch(e) {}
-         }, 1000); 
-      }
-
-      device.addEventListener('gattserverdisconnected', () => {
-        if (loopInterval) clearInterval(loopInterval);
-      });
-
-      alert(`✅ อัปเดตแพทช์ปิดตายบั๊ก 41.06 เรียบร้อย! ก้าวขึ้นชั่งได้เลยครับ`);
+      alert(`✅ โหมดไร้ตัวตนพร้อมทำงาน! ขึ้นชั่งน้ำหนักได้เลยครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
 
     } catch (error) {
-      if (loopInterval) clearInterval(loopInterval);
       console.error("BLE Error:", error);
+      alert(`❌ การเชื่อมต่อล้มเหลว`);
     }
   };
 
