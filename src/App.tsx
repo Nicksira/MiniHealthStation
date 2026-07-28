@@ -410,6 +410,8 @@ function App() {
   };
 
   const connectBluetoothWeight = async () => {
+    let loopInterval: NodeJS.Timeout | null = null; 
+
     try {
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
@@ -421,28 +423,31 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("🟢 [Live Mode] เชื่อมต่อสำเร็จ! ระบบสแตนด์บายรอรับน้ำหนัก...");
+      console.log("🔥 [Active Ping Mode] ส่งรหัสปลุกตราชั่งให้ตื่น!");
 
       const processData = (rawData: Uint8Array) => {
-        if (rawData.length < 6) return;
+        const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        
+        // ซ่อนแพ็กเก็ตที่เป็น 0.00 kg เพื่อไม่ให้ Console รก (10 0a 00 07 00 00)
+        if (hexStr.includes("10 0a 00 07 00 00")) return; 
+        if (hexStr.includes("00 00 00 00 00 00")) return;
 
-        // 🎯 ล็อคเป้าเฉพาะแพ็กเก็ตน้ำหนักสด (Live Data) ที่ขึ้นต้นด้วย 10 0a
-        if (rawData[0] === 0x10 && rawData[1] === 0x0a) {
+        // ปริ้นข้อมูลที่เหลือทั้งหมดออกมาดู
+        console.log(`📥 ข้อมูลลอยมา: ${hexStr}`);
+
+        // 🎯 ล็อคเป้าเฉพาะ Live Data (หัวแพ็กเก็ตต้องเป็น 10 0a เท่านั้น)
+        if (rawData.length >= 6 && rawData[0] === 0x10 && rawData[1] === 0x0a) {
           
-          // ดึงน้ำหนักจากไบต์ 4 และ 5
+          // ดึงน้ำหนักจากไบต์ที่ 4 และ 5 (ข้าม 10 0a ไปเลย หมดปัญหาเลข 41.06)
           let val = (rawData[4] << 8) | rawData[5];
           let weight = (val * 0.01).toFixed(2);
 
-          // พิมพ์แจ้งเตือนเฉพาะตอนที่น้ำหนักมากกว่า 0 กิโลกรัม 
-          if (parseFloat(weight) > 0) {
-             const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
-             console.log(`⚖️ ข้อมูลเข้า: ${hexStr} -> แปลงได้: ${weight} kg`);
-          }
-
-          // ถ้าน้ำหนักเกิน 5 กิโลกรัม ให้เด้งขึ้นหน้าจอโปรแกรมทันที!
+          // ถ้าน้ำหนักเกิน 5 กิโลกรัม แสดงว่าเป็นคนจริงๆ ยิงขึ้นจอเลย!
           if (parseFloat(weight) > 5.0 && parseFloat(weight) < 250.0) {
+             console.log(`🎉 [BINGO!] ล็อคค่าน้ำหนักจริงสำเร็จ: ${weight} kg`);
+             
              setVitals(prev => {
-                if (prev.weight === weight.toString()) return prev; // กันหน้าจอกระตุก
+                if (prev.weight === weight.toString()) return prev; // ป้องกันจอกระตุก
                 const h = parseFloat(prev.height) / 100;
                 return { 
                   ...prev, 
@@ -455,8 +460,9 @@ function App() {
       };
 
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
+      const writePipes = characteristics?.filter(c => c.properties.write || c.properties.writeWithoutResponse) || [];
 
-      // เปิดหูรับฟังข้อมูลอย่างเดียว
+      // 🎧 1. เปิดรับฟังข้อมูล
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
@@ -466,10 +472,43 @@ function App() {
         } catch (e) {}
       }
 
-      alert(`✅ ระบบ Kiosk สแตนด์บาย 100%! กรุณาก้าวขึ้นชั่งน้ำหนักได้เลยครับ`);
+      // 🔑 2. ยิงรหัสปลุก (ตัดคำสั่งดึงประวัติเก่าออกให้หมด)
+      const wakeUpCommands = [
+        new Uint8Array([0xFD, 0x37]), // รหัสมาตรฐานปลุกบอร์ด OEM
+        new Uint8Array([0x01, 0x00])  // รหัสขอสตรีมข้อมูล
+      ];
+
+      for (const char of writePipes) {
+        for (const cmd of wakeUpCommands) {
+           try {
+             if (char.properties.writeWithoutResponse) await char.writeValueWithoutResponse(cmd);
+             else await char.writeValue(cmd);
+           } catch(e) { }
+        }
+      }
+
+      // 💓 3. ระบบ Ping เลี้ยงสัญญาณ ป้องกันเครื่องชั่งหลับ
+      const mainWritePipe = writePipes.find(c => c.uuid.includes('a623') || c.uuid.includes('a622'));
+      if (mainWritePipe) {
+         loopInterval = setInterval(async () => {
+            try {
+              const ping = new Uint8Array([0x00]); // ส่งแพ็กเก็ตว่างๆ ไปเตือนว่าเรายังอยู่
+              if (mainWritePipe.properties.writeWithoutResponse) await mainWritePipe.writeValueWithoutResponse(ping);
+              else await mainWritePipe.writeValue(ping);
+            } catch(e) {}
+         }, 1000); // ยิงทุก 1 วินาที
+      }
+
+      device.addEventListener('gattserverdisconnected', () => {
+        if (loopInterval) clearInterval(loopInterval);
+        console.log("❌ อุปกรณ์ตัดสาย");
+      });
+
+      alert(`✅ เปิดระบบ Ping ทำงาน 100%! ก้าวขึ้นชั่งน้ำหนักได้เลยครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
 
     } catch (error) {
+      if (loopInterval) clearInterval(loopInterval);
       console.error("BLE Error:", error);
     }
   };
