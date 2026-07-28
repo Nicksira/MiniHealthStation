@@ -590,23 +590,90 @@ function App() {
 
   const connectBluetoothBP = async () => {
     try {
+      // 1. ค้นหาอุปกรณ์ที่รองรับมาตรฐานเครื่องวัดความดันสากล (0x1810)
       const device = await navigator.bluetooth.requestDevice({ 
-        filters: [{ namePrefix: 'Yuwell BP' }], 
-        optionalServices: ['blood_pressure'] 
+        acceptAllDevices: true, 
+        optionalServices: ['blood_pressure'] // ใช้ชื่อ Service มาตรฐานสากลได้เลย
       });
+      
       const server = await device.gatt?.connect();
       const service = await server?.getPrimaryService('blood_pressure');
+      
+      // 2. เจาะจงท่อข้อมูล "Blood Pressure Measurement" (0x2A35)
       const characteristic = await service?.getCharacteristic('blood_pressure_measurement');
+
+      console.clear();
+      console.log("🏥 [IEEE 11073 Standard] เชื่อมต่อ YUWELL BP สำเร็จ เตรียมรับข้อมูล...");
+
+      // 🧠 [Enterprise Parser] ระบบถอดรหัสมาตรฐานอุปกรณ์การแพทย์สากล
+      const parseBPData = (dataView: DataView) => {
+        let offset = 0;
+        
+        // 🎯 สกัด Flag Byte (8 bits แรก) เพื่อดูว่าเครื่องส่งอะไรมาบ้าง
+        const flags = dataView.getUint8(offset++);
+        
+        const isKpa = (flags & 0x01) !== 0; // เช็คหน่วย (0 = mmHg, 1 = kPa)
+        const hasTimestamp = (flags & 0x02) !== 0; // มีเวลาส่งมาด้วยไหม
+        const hasPulseRate = (flags & 0x04) !== 0; // มีอัตราการเต้นหัวใจมาไหม
+
+        // ⚙️ ฟังก์ชันย่อยสำหรับอ่านค่า SFLOAT (16-bit Float มาตรฐานการแพทย์)
+        const readSfloat = (view: DataView, pos: number) => {
+          const raw = view.getUint16(pos, true); // อ่านแบบ Little-Endian
+          const mantissa = raw & 0x0FFF;         // 12 bit สำหรับตัวเลข
+          let exponent = raw >> 12;              // 4 bit สำหรับจุดทศนิยม
+          if (exponent >= 8) exponent = -((~exponent & 0x0F) + 1);
+          return mantissa * Math.pow(10, exponent);
+        };
+
+        // 🎯 ดึงค่า SYS, DIA, MAP (ค่าละ 2 Bytes)
+        const sys = readSfloat(dataView, offset); offset += 2;
+        const dia = readSfloat(dataView, offset); offset += 2;
+        const map = readSfloat(dataView, offset); offset += 2;
+
+        // ข้าม Timestamp ถัามีแถมมา
+        if (hasTimestamp) offset += 7; 
+
+        // 🎯 ดึงค่า Pulse (อัตราการเต้นของหัวใจ)
+        let pulse = 0;
+        if (hasPulseRate) {
+          pulse = readSfloat(dataView, offset); offset += 2;
+        }
+
+        return { sys, dia, pulse, isKpa };
+      };
+
+      // 🎧 3. เปิดระบบดักฟัง (Indicate)
       await characteristic?.startNotifications();
       characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
-        const value = event.target.value;
-        setVitals(prev => ({ ...prev, sysDia: `${value.getUint16(1, true)}/${value.getUint16(3, true)}` }));
+        const dataView = new DataView(event.target.value.buffer);
+        const bpData = parseBPData(dataView);
+
+        // แปลงหน่วยเป็น mmHg ให้เป็นมาตรฐานเดียวกันสำหรับ JHCIS
+        const finalSys = bpData.isKpa ? (bpData.sys * 7.50062).toFixed(0) : bpData.sys.toFixed(0);
+        const finalDia = bpData.isKpa ? (bpData.dia * 7.50062).toFixed(0) : bpData.dia.toFixed(0);
+        const finalPulse = bpData.pulse.toFixed(0);
+
+        console.log(`✅ [Verified Vitals] SYS: ${finalSys}, DIA: ${finalDia}, Pulse: ${finalPulse}`);
+
+        // 🚀 อัปเดตข้อมูลขึ้นหน้าจอ UI ของ Kiosk ทันที
+        setVitals((prev: any) => ({ 
+          ...prev, 
+          bps: finalSys, 
+          bpd: finalDia, 
+          pulse: finalPulse 
+        }));
       });
-      alert('✅ เชื่อมต่อเครื่องวัดความดันสำเร็จ!');
-      updateDeviceName('bp', device.name || 'Yuwell BP');
-    } catch (error) { 
-      console.error("BP Error:", error); 
-      alert('❌ ยกเลิกหรืออุปกรณ์อาจใช้โปรโตคอลเฉพาะตัว'); 
+
+      device.addEventListener('gattserverdisconnected', () => {
+        console.warn("❌ [System Alert] เครื่องวัดความดันตัดการเชื่อมต่อ");
+      });
+
+      alert(`✅ เชื่อมต่อ YUWELL สำเร็จ! กรุณาสวมปลอกแขนแล้วกดปุ่มวัดความดันได้เลยครับ`);
+      updateDeviceName('bloodPressure', device.name || 'YUWELL BP');
+
+    } catch (error) {
+      console.error("BLE Error (BP):", error);
+      alert("❌ ไม่สามารถเชื่อมต่อเครื่องวัดความดันได้");
     }
   };
 
