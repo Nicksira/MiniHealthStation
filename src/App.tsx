@@ -421,59 +421,42 @@ function App() {
       const characteristics = await service?.getCharacteristics();
 
       console.clear();
-      console.log("👻 [Ghost Mode] โหมดไร้ตัวตน: ปิดคำสั่งรบกวน นั่งดักฟังเงียบๆ...");
+      console.log("🟢 [Live Mode] เชื่อมต่อสำเร็จ! ระบบสแตนด์บายรอรับน้ำหนัก...");
 
       const processData = (rawData: Uint8Array) => {
-        const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
-        
-        // เมินแพ็กเก็ตที่ว่างเปล่า (0.00 kg) จะได้ไม่รก Console
-        if (hexStr.includes("00 00 00 00 00 00 00 00")) return;
+        if (rawData.length < 6) return;
 
-        console.log(`📡 [ข้อมูลลอยมาในอากาศ]: ${hexStr}`);
+        // 🎯 ล็อคเป้าเฉพาะแพ็กเก็ตน้ำหนักสด (Live Data) ที่ขึ้นต้นด้วย 10 0a
+        if (rawData[0] === 0x10 && rawData[1] === 0x0a) {
+          
+          // ดึงน้ำหนักจากไบต์ 4 และ 5
+          let val = (rawData[4] << 8) | rawData[5];
+          let weight = (val * 0.01).toFixed(2);
 
-        let foundWeight: string | null = null;
+          // พิมพ์แจ้งเตือนเฉพาะตอนที่น้ำหนักมากกว่า 0 กิโลกรัม 
+          if (parseFloat(weight) > 0) {
+             const hexStr = Array.from(rawData).map(b => b.toString(16).padStart(2, '0')).join(' ');
+             console.log(`⚖️ ข้อมูลเข้า: ${hexStr} -> แปลงได้: ${weight} kg`);
+          }
 
-        // 🎯 AI สแกนเฉพาะตัวเลข (เริ่มสแกนจาก Index 2 เพื่อหลบหัวแพ็กเก็ต ป้องกันเลข 41.06 โผล่)
-        for (let i = 2; i < rawData.length - 1; i++) {
-           
-           // 1. อ่านแบบมาตรฐาน (Big-Endian)
-           let valBig = (rawData[i] << 8) | rawData[i + 1];
-           let kgBig = (valBig * 0.01).toFixed(2);
-           if (parseFloat(kgBig) >= 30.0 && parseFloat(kgBig) <= 150.0) {
-             foundWeight = kgBig; break;
-           }
-           
-           // 2. อ่านแบบสลับด้าน (Little-Endian)
-           let valLittle = (rawData[i + 1] << 8) | rawData[i];
-           let kgLittle = (valLittle * 0.01).toFixed(2);
-           if (parseFloat(kgLittle) >= 30.0 && parseFloat(kgLittle) <= 150.0) {
-             foundWeight = kgLittle; break;
-           }
-
-           // 3. แผนสำรองสุดโต่ง: เผื่อเครื่องชั่งส่งมาเป็นตัวเลขตรงๆ (BCD) เช่น 69 30 = 69.30
-           let bcdStr = rawData[i].toString(16).padStart(2, '0') + "." + rawData[i+1].toString(16).padStart(2, '0');
-           if (parseFloat(bcdStr) >= 30.0 && parseFloat(bcdStr) <= 150.0) {
-             foundWeight = bcdStr; break;
-           }
-        }
-
-        if (foundWeight) {
-           console.log(`🎉 [BINGO!] ดึงน้ำหนักสดๆ สำเร็จ: ${foundWeight} kg`);
-           setVitals(prev => {
-              if (prev.weight === foundWeight?.toString()) return prev; // กันจอกระพริบ
-              const h = parseFloat(prev.height) / 100;
-              return { 
-                ...prev, 
-                weight: foundWeight!.toString(), 
-                bmi: h > 0 ? (parseFloat(foundWeight!) / (h * h)).toFixed(2) : '---' 
-              };
-           });
+          // ถ้าน้ำหนักเกิน 5 กิโลกรัม ให้เด้งขึ้นหน้าจอโปรแกรมทันที!
+          if (parseFloat(weight) > 5.0 && parseFloat(weight) < 250.0) {
+             setVitals(prev => {
+                if (prev.weight === weight.toString()) return prev; // กันหน้าจอกระตุก
+                const h = parseFloat(prev.height) / 100;
+                return { 
+                  ...prev, 
+                  weight: weight.toString(), 
+                  bmi: h > 0 ? (parseFloat(weight) / (h * h)).toFixed(2) : '---' 
+                };
+             });
+          }
         }
       };
 
       const notifyPipes = characteristics?.filter(c => c.properties.notify || c.properties.indicate) || [];
 
-      // 🎧 เปิดรับฟังอย่างเดียว "ห้ามส่งคำสั่ง (Write) ใดๆ ทั้งสิ้น"
+      // เปิดหูรับฟังข้อมูลอย่างเดียว
       for (const char of notifyPipes) {
         try {
           await char.startNotifications();
@@ -483,12 +466,11 @@ function App() {
         } catch (e) {}
       }
 
-      alert(`✅ โหมดไร้ตัวตนพร้อมทำงาน! ขึ้นชั่งน้ำหนักได้เลยครับ`);
+      alert(`✅ ระบบ Kiosk สแตนด์บาย 100%! กรุณาก้าวขึ้นชั่งน้ำหนักได้เลยครับ`);
       updateDeviceName('weight', device.name || 'ALLWELL Scale');
 
     } catch (error) {
       console.error("BLE Error:", error);
-      alert(`❌ การเชื่อมต่อล้มเหลว`);
     }
   };
 
