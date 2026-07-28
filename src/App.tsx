@@ -588,52 +588,41 @@ function App() {
     }
   };
 
+  // 🚀 ฟังก์ชันหลักสำหรับกดเชื่อมต่อครั้งแรก (และอัปเดต UI ให้ตัวเลขขึ้น)
   const connectBluetoothBP = async () => {
     try {
-      // 1. ค้นหาอุปกรณ์ที่รองรับมาตรฐานเครื่องวัดความดันสากล (0x1810)
       const device = await navigator.bluetooth.requestDevice({ 
         acceptAllDevices: true, 
-        optionalServices: ['blood_pressure'] // ใช้ชื่อ Service มาตรฐานสากลได้เลย
+        optionalServices: ['blood_pressure'] 
       });
       
       const server = await device.gatt?.connect();
       const service = await server?.getPrimaryService('blood_pressure');
-      
-      // 2. เจาะจงท่อข้อมูล "Blood Pressure Measurement" (0x2A35)
       const characteristic = await service?.getCharacteristic('blood_pressure_measurement');
 
       console.clear();
-      console.log("🏥 [IEEE 11073 Standard] เชื่อมต่อ YUWELL BP สำเร็จ เตรียมรับข้อมูล...");
+      console.log("🏥 [IEEE 11073 Standard] เชื่อมต่อ YUWELL สำเร็จ!");
 
-      // 🧠 [Enterprise Parser] ระบบถอดรหัสมาตรฐานอุปกรณ์การแพทย์สากล
       const parseBPData = (dataView: DataView) => {
         let offset = 0;
-        
-        // 🎯 สกัด Flag Byte (8 bits แรก) เพื่อดูว่าเครื่องส่งอะไรมาบ้าง
         const flags = dataView.getUint8(offset++);
-        
-        const isKpa = (flags & 0x01) !== 0; // เช็คหน่วย (0 = mmHg, 1 = kPa)
-        const hasTimestamp = (flags & 0x02) !== 0; // มีเวลาส่งมาด้วยไหม
-        const hasPulseRate = (flags & 0x04) !== 0; // มีอัตราการเต้นหัวใจมาไหม
+        const isKpa = (flags & 0x01) !== 0; 
+        const hasTimestamp = (flags & 0x02) !== 0; 
+        const hasPulseRate = (flags & 0x04) !== 0; 
 
-        // ⚙️ ฟังก์ชันย่อยสำหรับอ่านค่า SFLOAT (16-bit Float มาตรฐานการแพทย์)
         const readSfloat = (view: DataView, pos: number) => {
-          const raw = view.getUint16(pos, true); // อ่านแบบ Little-Endian
-          const mantissa = raw & 0x0FFF;         // 12 bit สำหรับตัวเลข
-          let exponent = raw >> 12;              // 4 bit สำหรับจุดทศนิยม
+          const raw = view.getUint16(pos, true); 
+          const mantissa = raw & 0x0FFF;         
+          let exponent = raw >> 12;              
           if (exponent >= 8) exponent = -((~exponent & 0x0F) + 1);
           return mantissa * Math.pow(10, exponent);
         };
 
-        // 🎯 ดึงค่า SYS, DIA, MAP (ค่าละ 2 Bytes)
         const sys = readSfloat(dataView, offset); offset += 2;
         const dia = readSfloat(dataView, offset); offset += 2;
-        const map = readSfloat(dataView, offset); offset += 2;
-
-        // ข้าม Timestamp ถัามีแถมมา
+        offset += 2; // ข้าม MAP
         if (hasTimestamp) offset += 7; 
 
-        // 🎯 ดึงค่า Pulse (อัตราการเต้นของหัวใจ)
         let pulse = 0;
         if (hasPulseRate) {
           pulse = readSfloat(dataView, offset); offset += 2;
@@ -642,38 +631,70 @@ function App() {
         return { sys, dia, pulse, isKpa };
       };
 
-      // 🎧 3. เปิดระบบดักฟัง (Indicate)
       await characteristic?.startNotifications();
       characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
         const dataView = new DataView(event.target.value.buffer);
         const bpData = parseBPData(dataView);
 
-        // แปลงหน่วยเป็น mmHg ให้เป็นมาตรฐานเดียวกันสำหรับ JHCIS
         const finalSys = bpData.isKpa ? (bpData.sys * 7.50062).toFixed(0) : bpData.sys.toFixed(0);
         const finalDia = bpData.isKpa ? (bpData.dia * 7.50062).toFixed(0) : bpData.dia.toFixed(0);
         const finalPulse = bpData.pulse.toFixed(0);
 
-        console.log(`✅ [Verified Vitals] SYS: ${finalSys}, DIA: ${finalDia}, Pulse: ${finalPulse}`);
+        // 🎯 [แก้ไขข้อ 1]: จัด Format Data ให้ตรงกับ UI หน้าจอ (ส่งทั้งแบบรวมและแยก เผื่อระบบต้องการ)
+        const combinedBP = `${finalSys}/${finalDia}`;
+        console.log(`✅ [Verified Vitals] ความดัน: ${combinedBP}, ชีพจร: ${finalPulse}`);
 
-        // 🚀 อัปเดตข้อมูลขึ้นหน้าจอ UI ของ Kiosk ทันที
         setVitals((prev: any) => ({ 
           ...prev, 
-          bps: finalSys, 
-          bpd: finalDia, 
+          bp: combinedBP,       // สำหรับ UI ที่มีช่องเดียว (125/88)
+          bps: finalSys,        // เผื่อ Database JHCIS ต้องการค่าแยก
+          bpd: finalDia,        // เผื่อ Database JHCIS ต้องการค่าแยก
           pulse: finalPulse 
         }));
       });
 
       device.addEventListener('gattserverdisconnected', () => {
-        console.warn("❌ [System Alert] เครื่องวัดความดันตัดการเชื่อมต่อ");
+        console.warn("❌ [System Alert] YUWELL ตัดการเชื่อมต่อ");
       });
 
-      alert(`✅ เชื่อมต่อ YUWELL สำเร็จ! กรุณาสวมปลอกแขนแล้วกดปุ่มวัดความดันได้เลยครับ`);
-      updateDeviceName('bloodPressure', device.name || 'YUWELL BP');
+      alert(`✅ เชื่อมต่อสำเร็จ! สามารถวัดความดันได้เลยครับ`);
+      
+      // 🎯 [แก้ไขข้อ 2]: เปลี่ยน Key เป็น 'bp' เพื่อให้ Modal ตั้งค่ารู้จักและจำอุปกรณ์นี้
+      updateDeviceName('bp', device.name || 'YUWELL BP'); 
 
     } catch (error) {
       console.error("BLE Error (BP):", error);
-      alert("❌ ไม่สามารถเชื่อมต่อเครื่องวัดความดันได้");
+    }
+  };
+
+  // =========================================================================
+  // 🤖 [God-Tier Bonus]: ฟังก์ชัน Auto-Connect สำหรับเชื่อมต่ออัตโนมัติในครั้งถัดไป
+  // (สามารถเอาฟังก์ชันนี้ไปวางใน useEffect เพื่อให้มันทำงานทันทีที่เปิดแอปได้เลยครับ)
+  // =========================================================================
+  const autoConnectBP = async () => {
+    try {
+      // ตรวจสอบว่า Browser รองรับ getDevices ไหม (มาตรฐานใหม่)
+      if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return;
+      
+      // ดึงรายชื่ออุปกรณ์ทั้งหมดที่ "เคย" ขออนุญาตไว้แล้ว (ไม่ต้องใช้ Popup)
+      const devices = await navigator.bluetooth.getDevices();
+      const bpDevice = devices.find(d => d.name && d.name.includes('YUWELL'));
+      
+      if (bpDevice) {
+        console.log("🔄 [Auto-Connect] พบประวัติ YUWELL รอการเปิดเครื่องเพื่อเสียบต่ออัตโนมัติ...");
+        
+        // สั่งให้ Kiosk นั่งเฝ้าสัญญาณ ทันทีที่เครื่อง YUWELL เปิด มันจะวิ่งเข้าไปจับทันที!
+        bpDevice.addEventListener('advertisementreceived', async (event) => {
+          try {
+             console.log("⚡ [Auto-Connect] สัญญาณมาแล้ว! กำลังเชื่อมต่อเข้า GATT...");
+             await bpDevice.gatt?.connect();
+             // ถ้าเชื่อมต่อผ่าน ก็ไปเรียก service 'blood_pressure' เหมือนในฟังก์ชันหลักได้เลย
+          } catch(e) { }
+        });
+        await bpDevice.watchAdvertisements();
+      }
+    } catch (error) {
+      console.log("Auto-Connect ไม่รองรับในบราวเซอร์นี้");
     }
   };
 
