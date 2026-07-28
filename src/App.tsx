@@ -589,7 +589,7 @@ function App() {
   };
 
   // =========================================================================
-  // 🧠 1. ฟังก์ชันถอดรหัสความดันสากล (ใช้ร่วมกันทั้งโหมด Manual และ Auto)
+  // 🧠 1. ฟังก์ชันถอดรหัสความดันสากล (แยกออกมาให้ใช้ร่วมกันได้ทั้งโหมด Auto และ Manual)
   // =========================================================================
   const parseBPData = (dataView: DataView) => {
     let offset = 0;
@@ -619,7 +619,7 @@ function App() {
   };
 
   // =========================================================================
-  // 🚀 2. ฟังก์ชันหลักสำหรับกดเชื่อมต่อ "ครั้งแรก" เพื่อขอสิทธิ์ (User Gesture)
+  // 🚀 2. ฟังก์ชันจับคู่ครั้งแรก (ใช้กดแค่ครั้งเดียวในชีวิตเพื่อจับคู่ Kiosk กับ YUWELL)
   // =========================================================================
   const connectBluetoothBP = async () => {
     try {
@@ -633,7 +633,7 @@ function App() {
       const characteristic = await service?.getCharacteristic('blood_pressure_measurement');
 
       console.clear();
-      console.log("🏥 [IEEE 11073 Standard] เชื่อมต่อ YUWELL สำเร็จ!");
+      console.log("🏥 [IEEE 11073] จับคู่ YUWELL สำเร็จ!");
 
       await characteristic?.startNotifications();
       characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
@@ -644,22 +644,14 @@ function App() {
         const finalDia = bpData.isKpa ? (bpData.dia * 7.50062).toFixed(0) : bpData.dia.toFixed(0);
         const finalPulse = bpData.pulse.toFixed(0);
 
-        const combinedBP = `${finalSys}/${finalDia}`;
-        console.log(`✅ [Verified Vitals] ความดัน: ${combinedBP}, ชีพจร: ${finalPulse}`);
-
-        // 🎯 แก้ไขชื่อ Key ให้ตรงกับ State หลัก (sysDia) แบบเป๊ะๆ
-        setVitals((prev: any) => ({ 
+        setVitals(prev => ({ 
           ...prev, 
-          sysDia: combinedBP, 
+          sysDia: `${finalSys}/${finalDia}`, 
           pulse: finalPulse 
         }));
       });
 
-      device.addEventListener('gattserverdisconnected', () => {
-        console.warn("❌ [System Alert] YUWELL ตัดการเชื่อมต่อ");
-      });
-
-      alert(`✅ จับคู่อุปกรณ์สำเร็จ! การวัดครั้งต่อไปจะเชื่อมต่อให้อัตโนมัติครับ`);
+      alert(`✅ จับคู่อุปกรณ์สำเร็จ! การวัดครั้งต่อไป (หรือเปลี่ยนคนไข้) ระบบจะซุ่มจับสัญญาณให้อัตโนมัติครับ`);
       updateDeviceName('bp', device.name || 'YUWELL BP'); 
 
     } catch (error) {
@@ -668,63 +660,87 @@ function App() {
   };
 
   // =========================================================================
-  // 🤖 3. สถาปัตยกรรม Auto-Connect (ฝังอยู่ใน useEffect เพื่อให้ทำงานทันทีที่เปิดแอป)
+  // 🤖 3. [God-Tier] ระบบ Always-On Daemon: เฝ้าฟังเครื่องความดัน 24 ชั่วโมง
   // =========================================================================
   useEffect(() => {
-    const setupAutoConnect = async () => {
-      // 1. เช็คว่า Browser รองรับฟีเจอร์เบื้องหลังหรือไม่
-      if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return;
+    let bpDevice: BluetoothDevice | null = null;
+    let isWatching = false;
+
+    // ฟังก์ชันย่อยสำหรับพุ่งเข้าชน เมื่อเครื่องความดันถูกเปิดใช้งาน
+    const handleAdvertisement = async () => {
+      // ถ้ากำลังเชื่อมต่ออยู่แล้ว ให้ข้ามไป จะได้ไม่ชนกัน
+      if (!bpDevice || bpDevice.gatt?.connected) return; 
       
+      console.log("⚡ [Always-On] คนไข้เปิดเครื่อง YUWELL! บอทกำลังพุ่งเข้าดึงข้อมูล...");
       try {
-        // 2. ดึงประวัติอุปกรณ์ทั้งหมดที่คนไข้เคย "กดอนุญาต" ไปแล้ว
-        const pairedDevices = await navigator.bluetooth.getDevices();
+        const server = await bpDevice.gatt?.connect();
+        const service = await server?.getPrimaryService('blood_pressure');
+        const characteristic = await service?.getCharacteristic('blood_pressure_measurement');
         
-        for (const device of pairedDevices) {
-          // 3. กรองเฉพาะเครื่องวัดความดัน
-          if (device.name && device.name.includes('YUWELL')) {
-            console.log("🔄 [Background Listener] สแตนด์บายรอสัญญาณคลื่นวิทยุจาก YUWELL...");
-            
-            // 4. ตั้งป้อมดักฟัง ทันทีที่เครื่องความดันเปิด มันจะกระจายสัญญาณ (Advertise)
-            device.addEventListener('advertisementreceived', async () => {
-              console.log("⚡ [Auto-Connect] ตรวจพบคนไข้เปิดเครื่อง YUWELL! กำลังเชื่อมต่อเข้า GATT...");
-              try {
-                const server = await device.gatt?.connect();
-                const service = await server?.getPrimaryService('blood_pressure');
-                const characteristic = await service?.getCharacteristic('blood_pressure_measurement');
-                
-                await characteristic?.startNotifications();
-                characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
-                  const dataView = new DataView(event.target.value.buffer);
-                  const bpData = parseBPData(dataView);
+        await characteristic?.startNotifications();
+        characteristic?.addEventListener('characteristicvaluechanged', (event: any) => {
+          const dataView = new DataView(event.target.value.buffer);
+          const bpData = parseBPData(dataView);
 
-                  const finalSys = bpData.isKpa ? (bpData.sys * 7.50062).toFixed(0) : bpData.sys.toFixed(0);
-                  const finalDia = bpData.isKpa ? (bpData.dia * 7.50062).toFixed(0) : bpData.dia.toFixed(0);
-                  const finalPulse = bpData.pulse.toFixed(0);
+          const finalSys = bpData.isKpa ? (bpData.sys * 7.50062).toFixed(0) : bpData.sys.toFixed(0);
+          const finalDia = bpData.isKpa ? (bpData.dia * 7.50062).toFixed(0) : bpData.dia.toFixed(0);
+          const finalPulse = bpData.pulse.toFixed(0);
+          const combinedBP = `${finalSys}/${finalDia}`;
 
-                  // อัปเดตข้อมูลขึ้นหน้าจอและสั่งให้ AI พากย์เสียงแจ้งคนไข้ทันที
-                  setVitals((prev: any) => ({ 
-                    ...prev, 
-                    sysDia: `${finalSys}/${finalDia}`, 
-                    pulse: finalPulse 
-                  }));
-                  speak(`วัดความดันเสร็จสิ้น ค่าความดันโลหิต ${finalSys} ตัวล่าง ${finalDia} ชีพจร ${finalPulse} ครั้งต่อนาทีค่ะ`);
-                });
-              } catch(e) {
-                console.error("Auto-Connect Handshake Failed:", e);
-              }
-            });
-            
-            // 5. สั่งให้ Browser เริ่มทำการเฝ้าฟัง (Watch)
-            await device.watchAdvertisements();
-          }
-        }
-      } catch (error) {
-        console.log("Auto-Connect Policy Blocked:", error);
+          console.log(`✅ [Auto-Connect Vitals] ความดัน: ${combinedBP}, ชีพจร: ${finalPulse}`);
+
+          // ใช้ prev เสมอ เพื่อให้ชัวร์ว่าอัปเดตข้อมูลของคนไข้ "คนปัจจุบัน" จริงๆ
+          setVitals(prev => ({ 
+            ...prev, 
+            sysDia: combinedBP, 
+            pulse: finalPulse 
+          }));
+          
+          speak(`วัดความดันเสร็จสิ้น ความดันโลหิต ${finalSys} ตัวล่าง ${finalDia} ชีพจร ${finalPulse} ครั้งต่อนาทีค่ะ`);
+        });
+
+        // 🎯 จุดสำคัญที่สุด: เมื่อเครื่องตัดสาย (ชั่งเสร็จ/ประหยัดแบต) บอทจะกลับไปซุ่มรอคนต่อไปทันที!
+        bpDevice.addEventListener('gattserverdisconnected', () => {
+          console.log("🔄 [Always-On] YUWELL วัดเสร็จและตัดสาย... บอทกลับสู่โหมดซุ่มรอคนต่อไป");
+        }, { once: true });
+
+      } catch (e) {
+        console.error("Always-On Connection Failed:", e);
       }
     };
 
-    setupAutoConnect();
-  }, []); // [] = ทำงานแค่ครั้งเดียวตอนโหลดแอปขึ้นมา
+    // ฟังก์ชันปลุกบอทขึ้นมาทำงานตอนเปิด Kiosk
+    const setupAlwaysOnBP = async () => {
+      if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return;
+      
+      try {
+        // ค้นหาประวัติ YUWELL ที่เคยจับคู่ไว้ในเครื่อง Kiosk
+        const devices = await navigator.bluetooth.getDevices();
+        bpDevice = devices.find(d => d.name && d.name.includes('YUWELL')) || null;
+        
+        if (bpDevice && !isWatching) {
+          console.log("🛡️ [Always-On Daemon] เริ่มเฝ้าระวังสัญญาณ YUWELL พื้นหลังแบบถาวร...");
+          isWatching = true;
+          
+          bpDevice.removeEventListener('advertisementreceived', handleAdvertisement);
+          bpDevice.addEventListener('advertisementreceived', handleAdvertisement);
+          
+          await bpDevice.watchAdvertisements();
+        }
+      } catch (error) {
+        console.log("Daemon Init Failed:", error);
+      }
+    };
+
+    setupAlwaysOnBP();
+
+    // ทำลายบอททิ้งอย่างปลอดภัย กรณีที่ Kiosk ปิดตัว
+    return () => {
+       if (bpDevice && isWatching) {
+          bpDevice.removeEventListener('advertisementreceived', handleAdvertisement);
+       }
+    };
+  }, []); // [] สำคัญมาก: แปลว่าบอทตัวนี้จะทำงานเป็นอมตะ ไม่ถูกรีเซ็ตแม้คนไข้จะกด Logout (เปลี่ยนคน) ก็ตาม!
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
