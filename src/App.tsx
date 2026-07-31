@@ -829,9 +829,10 @@ function App() {
       if (response.data || response.status === 200) {
         speak('บันทึกข้อมูลและจัดคิวเข้าสู่ระบบสำเร็จ ขอบคุณที่ใช้บริการค่ะ');
         setNotifyModal({ show: true, isSuccess: true, title: 'จัดคิวสำเร็จ!', message: 'ส่งข้อมูลผู้ป่วยเข้าสู่ระบบ JHCIS เรียบร้อยแล้ว' });
+        
+        // 🎯 สถาปัตยกรรมใหม่: แค่ปิดหน้าต่างแจ้งเตือน แต่ "ไม่ Logout" ผู้ป่วยออก
         setTimeout(() => {
           setNotifyModal(prev => ({ ...prev, show: false }));
-          handleLogout();
         }, 3000);
       }
     } catch (error) {
@@ -847,9 +848,10 @@ function App() {
         title: 'บันทึกออฟไลน์สำเร็จ (เน็ตขัดข้อง)', 
         message: 'ระบบเก็บข้อมูลของท่านไว้ใน Kiosk อย่างปลอดภัยแล้ว เจ้าหน้าที่จะซิงค์เข้าระบบให้ภายหลังครับ' 
       });
+      
+      // 🎯 สถาปัตยกรรมใหม่: กรณี Offline ก็ "ไม่ Logout" เช่นกัน
       setTimeout(() => {
         setNotifyModal(prev => ({ ...prev, show: false }));
-        handleLogout();
       }, 4000);
     } finally {
       setIsSubmitting(false); 
@@ -1289,24 +1291,16 @@ function App() {
               ))}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '25px' }}>
-              <div style={{ display: 'flex', gap: '15px' }}>
-                {healthAnalysis.isEmergency && (
-                  <a href="tel:1669" style={{ flex: 1, padding: '15px', backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textDecoration: 'none', boxShadow: '0 4px 6px rgba(239, 68, 68, 0.3)' }}>
-                    <i className="fa-solid fa-truck-medical" style={{ fontSize: '24px' }}></i> โทรเรียก 1669 ทันที!
-                  </a>
-                )}
-                
-                <button 
-                  onClick={() => setShowTelemedModal(true)}
-                  style={{ flex: 2, padding: '15px', backgroundColor: '#0284c7', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'transform 0.2s', boxShadow: '0 4px 6px rgba(2, 132, 199, 0.3)' }}
-                  onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                  onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                  <i className="fa-solid fa-video" style={{ fontSize: '24px' }}></i> ปรึกษาแพทย์ออนไลน์ (Telemedicine)
-                </button>
-              </div>
-
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '30px' }}>
+              
+              {/* 🚨 ปุ่ม 0: ฉุกเฉิน (Edge Case: ปรากฏขึ้นบนสุดและสีแดงจัด เฉพาะเมื่อความดันวิกฤต) */}
+              {healthAnalysis.isEmergency && (
+                <a href="tel:1669" style={{ width: '100%', padding: '15px', backgroundColor: '#EF4444', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textDecoration: 'none', boxShadow: '0 4px 6px rgba(239, 68, 68, 0.3)', animation: 'pulse 2s infinite' }}>
+                  <i className="fa-solid fa-truck-medical" style={{ fontSize: '24px' }}></i> โทรเรียก 1669 ทันที!
+                </a>
+              )}
+              
+              {/* 💾 ปุ่ม 1: บันทึกข้อมูล JHCIS (Primary Action - สีเขียว - อยู่บนสุด) */}
               <button 
                 onClick={sendToJHCISQueue}
                 style={{ width: '100%', padding: '18px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontSize: '20px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'transform 0.2s', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.3)' }}
@@ -1315,6 +1309,27 @@ function App() {
               >
                 <i className="fa-solid fa-server" style={{ fontSize: '24px' }}></i> บันทึกข้อมูลและจัดคิวลง JHCIS
               </button>
+
+              {/* 📹 ปุ่ม 2: Telemedicine (Secondary Action - สีฟ้า) */}
+              <button 
+                onClick={() => setShowTelemedModal(true)}
+                style={{ width: '100%', padding: '15px', backgroundColor: '#0284c7', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'transform 0.2s', boxShadow: '0 4px 6px rgba(2, 132, 199, 0.3)' }}
+                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <i className="fa-solid fa-video" style={{ fontSize: '24px' }}></i> ปรึกษาแพทย์ออนไลน์ (Telemedicine)
+              </button>
+
+              {/* 🔄 ปุ่ม 3: ค้นหาผู้ป่วยรายใหม่ (Tertiary Action - สีเทา Slate - ใช้เคลียร์ State และกลับหน้าแรก) */}
+              <button 
+                onClick={handleLogout}
+                style={{ width: '100%', padding: '15px', backgroundColor: '#64748b', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'transform 0.2s', boxShadow: '0 4px 6px rgba(100, 116, 139, 0.3)', marginTop: '10px' }}
+                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <i className="fa-solid fa-user-plus" style={{ fontSize: '24px' }}></i> ค้นหาผู้ป่วยรายใหม่
+              </button>
+
             </div>
           </div>
         </main>
