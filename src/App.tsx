@@ -815,51 +815,62 @@ function App() {
     setShowConfirmQueueModal(true);
   };
 
+  // 🎯 [God-Tier Frontend] ฟังก์ชันกดยืนยันแล้วยิง API ไปหา Backend (server.js)
   const confirmSendToJHCISQueue = async () => {
     setShowConfirmQueueModal(false); 
     setIsSubmitting(true); 
 
-    // การจัดเตรียมโครงสร้างข้อมูล (Data Preparation) สำหรับ JHCIS API
+    // 📦 ห่อข้อมูล (Payload) ทุกตัวเพื่อส่งให้ Backend
     const payload = {
       cid: patient.cid,
       weight: vitals.weight === '' || vitals.weight === '---' ? 0 : parseFloat(vitals.weight),
       height: vitals.height === '' || vitals.height === '---' ? 0 : parseFloat(vitals.height),
       sysDia: vitals.sysDia === '---' ? '' : vitals.sysDia, 
       pulse: vitals.pulse === '' || vitals.pulse === '---' ? 0 : parseInt(vitals.pulse),
+      temp: vitals.temp === '' || vitals.temp === '---' ? 0 : parseFloat(vitals.temp),
       
-      // ส่วนที่เพิ่มใหม่: จัดการข้อมูลรอบเอวและตรวจสอบ Edge Case (ค่าว่าง)
+      // ✅ รอบเอว (waist)
       waist: vitals.waist === '' || vitals.waist === '---' ? 0 : parseFloat(vitals.waist),
       
-      // ส่วนที่เพิ่มใหม่: จัดรูปแบบข้อความผลตรวจน้ำตาลในเลือด
-      sugarText: vitals.sugar === '' || vitals.sugar === '---' ? '' : `น้ำตาลในเลือด ${vitals.sugar}`
+      // 🚨 พระเอกของเรา! ห่อข้อความน้ำตาลในเลือดส่งไปด้วย
+      sugarText: vitals.sugar === '' || vitals.sugar === '---' ? '' : `น้ำตาลในเลือด ${vitals.sugar}`,
+      sugar: vitals.sugar === '' || vitals.sugar === '---' ? '' : vitals.sugar
     };
     
     try {
-      const response = await axios.post(`${API_BASE_URL}/jhcis-api/queue`, payload, { 
-        headers: { 'x-api-key': API_KEY }, 
+      // 🚀 ยิง Payload ด้านบนทะลุ Cloudflare Tunnel ไปหา server.js
+      const response = await axios.post(`${API_BASE_URL}/jhcis-api/queue`, payload, {
+        headers: { 'x-api-key': API_KEY },
         timeout: 5000 
       });
 
       if (response.data || response.status === 200) {
         speak('บันทึกข้อมูลและจัดคิวเข้าสู่ระบบสำเร็จ ขอบคุณที่ใช้บริการค่ะ');
         setNotifyModal({ show: true, isSuccess: true, title: 'จัดคิวสำเร็จ!', message: 'ส่งข้อมูลผู้ป่วยเข้าสู่ระบบ JHCIS เรียบร้อยแล้ว' });
-        setTimeout(() => setNotifyModal(prev => ({ ...prev, show: false })), 3000);
+        
+        setTimeout(() => {
+          setNotifyModal(prev => ({ ...prev, show: false }));
+        }, 3000);
       }
     } catch (error) {
-      // การจัดการระบบข้อมูลสำรอง (Offline Fallback) ครอบคลุมตัวแปรใหม่
+      // 🛟 ระบบออฟไลน์ (กรณีเน็ตหลุด)
       const savedOffline = JSON.parse(localStorage.getItem('offline_queue') || '[]');
-      savedOffline.push({ 
-        ...payload, 
-        name: `${patient.fname} ${patient.lname}`, 
-        timestamp: new Date().toLocaleString('th-TH') 
-      });
+      savedOffline.push({ ...payload, name: `${patient.fname} ${patient.lname}`, timestamp: new Date().toLocaleString('th-TH') });
       localStorage.setItem('offline_queue', JSON.stringify(savedOffline));
       setOfflineQueue(savedOffline); 
 
       speak('การเชื่อมต่อขัดข้อง แต่ระบบได้บันทึกข้อมูลสำรองไว้ในเครื่องแล้วค่ะ ไม่ต้องกังวลนะคะ');
-      setNotifyModal({ show: true, isSuccess: true, title: 'บันทึกออฟไลน์สำเร็จ (เน็ตขัดข้อง)', message: 'ระบบเก็บข้อมูลของท่านไว้ใน Kiosk อย่างปลอดภัยแล้ว' });
-      setTimeout(() => setNotifyModal(prev => ({ ...prev, show: false })), 4000);
-    } finally { 
+      setNotifyModal({ 
+        show: true, 
+        isSuccess: true, 
+        title: 'บันทึกออฟไลน์สำเร็จ (เน็ตขัดข้อง)', 
+        message: 'ระบบเก็บข้อมูลของท่านไว้ใน Kiosk อย่างปลอดภัยแล้ว เจ้าหน้าที่จะซิงค์เข้าระบบให้ภายหลังครับ' 
+      });
+      
+      setTimeout(() => {
+        setNotifyModal(prev => ({ ...prev, show: false }));
+      }, 4000);
+    } finally {
       setIsSubmitting(false); 
     }
   };
