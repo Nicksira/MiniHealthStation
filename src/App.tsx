@@ -819,48 +819,47 @@ function App() {
     setShowConfirmQueueModal(false); 
     setIsSubmitting(true); 
 
+    // การจัดเตรียมโครงสร้างข้อมูล (Data Preparation) สำหรับ JHCIS API
     const payload = {
       cid: patient.cid,
       weight: vitals.weight === '' || vitals.weight === '---' ? 0 : parseFloat(vitals.weight),
       height: vitals.height === '' || vitals.height === '---' ? 0 : parseFloat(vitals.height),
       sysDia: vitals.sysDia === '---' ? '' : vitals.sysDia, 
       pulse: vitals.pulse === '' || vitals.pulse === '---' ? 0 : parseInt(vitals.pulse),
+      
+      // ส่วนที่เพิ่มใหม่: จัดการข้อมูลรอบเอวและตรวจสอบ Edge Case (ค่าว่าง)
+      waist: vitals.waist === '' || vitals.waist === '---' ? 0 : parseFloat(vitals.waist),
+      
+      // ส่วนที่เพิ่มใหม่: จัดรูปแบบข้อความผลตรวจน้ำตาลในเลือด
+      sugarText: vitals.sugar === '' || vitals.sugar === '---' ? '' : `น้ำตาลในเลือด ${vitals.sugar}`
     };
     
     try {
-      const response = await axios.post(`${API_BASE_URL}/jhcis-api/queue`, payload, {
-        headers: { 'x-api-key': API_KEY },
+      const response = await axios.post(`${API_BASE_URL}/jhcis-api/queue`, payload, { 
+        headers: { 'x-api-key': API_KEY }, 
         timeout: 5000 
       });
 
       if (response.data || response.status === 200) {
         speak('บันทึกข้อมูลและจัดคิวเข้าสู่ระบบสำเร็จ ขอบคุณที่ใช้บริการค่ะ');
         setNotifyModal({ show: true, isSuccess: true, title: 'จัดคิวสำเร็จ!', message: 'ส่งข้อมูลผู้ป่วยเข้าสู่ระบบ JHCIS เรียบร้อยแล้ว' });
-        
-        // 🎯 สถาปัตยกรรมใหม่: แค่ปิดหน้าต่างแจ้งเตือน แต่ "ไม่ Logout" ผู้ป่วยออก
-        setTimeout(() => {
-          setNotifyModal(prev => ({ ...prev, show: false }));
-        }, 3000);
+        setTimeout(() => setNotifyModal(prev => ({ ...prev, show: false })), 3000);
       }
     } catch (error) {
+      // การจัดการระบบข้อมูลสำรอง (Offline Fallback) ครอบคลุมตัวแปรใหม่
       const savedOffline = JSON.parse(localStorage.getItem('offline_queue') || '[]');
-      savedOffline.push({ ...payload, name: `${patient.fname} ${patient.lname}`, timestamp: new Date().toLocaleString('th-TH') });
+      savedOffline.push({ 
+        ...payload, 
+        name: `${patient.fname} ${patient.lname}`, 
+        timestamp: new Date().toLocaleString('th-TH') 
+      });
       localStorage.setItem('offline_queue', JSON.stringify(savedOffline));
       setOfflineQueue(savedOffline); 
 
       speak('การเชื่อมต่อขัดข้อง แต่ระบบได้บันทึกข้อมูลสำรองไว้ในเครื่องแล้วค่ะ ไม่ต้องกังวลนะคะ');
-      setNotifyModal({ 
-        show: true, 
-        isSuccess: true, 
-        title: 'บันทึกออฟไลน์สำเร็จ (เน็ตขัดข้อง)', 
-        message: 'ระบบเก็บข้อมูลของท่านไว้ใน Kiosk อย่างปลอดภัยแล้ว เจ้าหน้าที่จะซิงค์เข้าระบบให้ภายหลังครับ' 
-      });
-      
-      // 🎯 สถาปัตยกรรมใหม่: กรณี Offline ก็ "ไม่ Logout" เช่นกัน
-      setTimeout(() => {
-        setNotifyModal(prev => ({ ...prev, show: false }));
-      }, 4000);
-    } finally {
+      setNotifyModal({ show: true, isSuccess: true, title: 'บันทึกออฟไลน์สำเร็จ (เน็ตขัดข้อง)', message: 'ระบบเก็บข้อมูลของท่านไว้ใน Kiosk อย่างปลอดภัยแล้ว' });
+      setTimeout(() => setNotifyModal(prev => ({ ...prev, show: false })), 4000);
+    } finally { 
       setIsSubmitting(false); 
     }
   };
