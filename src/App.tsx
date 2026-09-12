@@ -1599,13 +1599,10 @@ const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำ�
       {/* 🟢 Footer แบบทะลุคลิกได้ */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, width: '100%', height: '15vh', backgroundImage: "url('/footer.png')", backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 10, pointerEvents: 'none' }}></div>
 
-      {/* 🟢 โซนปุ่มไอคอนมุมซ้ายล่าง */}
+      {/* 🟢 โซนปุ่มไอคอนมุมซ้ายล่าง (God-Tier Security: ซ่อนปุ่มตั้งค่า เหลือแค่ Bluetooth) */}
       <div className="bottom-icons" style={{ position: 'fixed', bottom: '20px', left: '25px', display: 'flex', gap: '20px', zIndex: 100 }}>
         <div onClick={() => setShowBluetoothModal(true)} title="จัดการ Bluetooth" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '45px', height: '45px', background: 'white', borderRadius: '50%', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', transition: 'transform 0.2s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgb(116, 192, 252)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"></polyline></svg>
-        </div>
-        <div onClick={() => { if (showSettings) { setShowSettings(false); } else { setShowPasswordModal(true); setPasswordInput(''); setPasswordError(false); } }} title="ตั้งค่าระบบ" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '45px', height: '45px', background: 'white', borderRadius: '50%', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', transition: 'transform 0.2s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgb(116, 192, 252)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
         </div>
       </div>
 
