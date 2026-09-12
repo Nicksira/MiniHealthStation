@@ -407,19 +407,20 @@ app.get('/jhcis-api/analytics', checkApiKey, async (req, res) => {
     try {
         connection = await mysql.createConnection(dbConfig);
         
-        // 1. [God-Tier Query] ใช้ REPLACE ล้างขีด (-) ป้องกันการ Join พลาด และใช้ BETWEEN จับช่วงอายุ
-        const [usageRows] = await connection.execute(`
+        // 1. [God-Tier Query] ใช้ Subquery และ LIKE เพื่อทะลุข้อจำกัดเรื่อง Collation Mismatch ของตาราง JHCIS
+        const sql = `
             SELECT 
                 COUNT(l.id) as total_usage,
-                SUM(CASE WHEN l.sex = '1' THEN 1 ELSE 0 END) as male_count,
-                SUM(CASE WHEN l.sex = '2' THEN 1 ELSE 0 END) as female_count,
-                SUM(CASE WHEN TIMESTAMPDIFF(YEAR, p.birth, CURDATE()) BETWEEN 0 AND 15 THEN 1 ELSE 0 END) as age_0_15,
-                SUM(CASE WHEN TIMESTAMPDIFF(YEAR, p.birth, CURDATE()) BETWEEN 16 AND 35 THEN 1 ELSE 0 END) as age_16_35,
-                SUM(CASE WHEN TIMESTAMPDIFF(YEAR, p.birth, CURDATE()) BETWEEN 36 AND 60 THEN 1 ELSE 0 END) as age_36_60,
-                SUM(CASE WHEN TIMESTAMPDIFF(YEAR, p.birth, CURDATE()) > 60 THEN 1 ELSE 0 END) as age_60_plus
+                CAST(SUM(CASE WHEN l.sex = '1' THEN 1 ELSE 0 END) AS SIGNED) as male_count,
+                CAST(SUM(CASE WHEN l.sex = '2' THEN 1 ELSE 0 END) AS SIGNED) as female_count,
+                CAST(SUM(CASE WHEN TIMESTAMPDIFF(YEAR, (SELECT MAX(birth) FROM person p WHERE REPLACE(p.idcard, '-', '') LIKE CONCAT('%', l.cid, '%')), CURDATE()) BETWEEN 0 AND 15 THEN 1 ELSE 0 END) AS SIGNED) as age_0_15,
+                CAST(SUM(CASE WHEN TIMESTAMPDIFF(YEAR, (SELECT MAX(birth) FROM person p WHERE REPLACE(p.idcard, '-', '') LIKE CONCAT('%', l.cid, '%')), CURDATE()) BETWEEN 16 AND 35 THEN 1 ELSE 0 END) AS SIGNED) as age_16_35,
+                CAST(SUM(CASE WHEN TIMESTAMPDIFF(YEAR, (SELECT MAX(birth) FROM person p WHERE REPLACE(p.idcard, '-', '') LIKE CONCAT('%', l.cid, '%')), CURDATE()) BETWEEN 36 AND 60 THEN 1 ELSE 0 END) AS SIGNED) as age_36_60,
+                CAST(SUM(CASE WHEN TIMESTAMPDIFF(YEAR, (SELECT MAX(birth) FROM person p WHERE REPLACE(p.idcard, '-', '') LIKE CONCAT('%', l.cid, '%')), CURDATE()) > 60 THEN 1 ELSE 0 END) AS SIGNED) as age_60_plus
             FROM kiosk_usage_log l
-            LEFT JOIN person p ON l.cid = REPLACE(p.idcard, '-', '')
-        `);
+        `;
+        
+        const [usageRows] = await connection.execute(sql);
         const usage = usageRows[0];
 
         // 2. ดึงข้อมูลคะแนนความพึงพอใจ
@@ -469,15 +470,14 @@ app.get('/jhcis-api/analytics', checkApiKey, async (req, res) => {
             success: true,
             data: {
                 usage: { total: usage.total_usage, male: usage.male_count, female: usage.female_count },
-                // 🛡️ God-Tier Fix: บังคับแปลงเป็น Int เสมอ ป้องกันการแตกเป็นค่าว่าง (Null) หรือ String
                 ageGroups: { 
-                    gen1: parseInt(usage.age_0_15) || 0, 
-                    gen2: parseInt(usage.age_16_35) || 0, 
-                    gen3: parseInt(usage.age_36_60) || 0, 
-                    gen4: parseInt(usage.age_60_plus) || 0 
+                    gen1: Number(usage.age_0_15) || 0, 
+                    gen2: Number(usage.age_16_35) || 0, 
+                    gen3: Number(usage.age_36_60) || 0, 
+                    gen4: Number(usage.age_60_plus) || 0 
                 },
                 satisfaction: { total: totalRatings, average: avgScore, chartData: chartData },
-                summary: summaryText // 🔴 ส่งข้อความสรุปผลกลับไปให้ Frontend
+                summary: summaryText
             }
         });
 
