@@ -818,7 +818,7 @@ const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำ�
     setShowConfirmQueueModal(true);
   };
 
-  // 🎯 [God-Tier Frontend] ฟังก์ชันกดยืนยันแล้วยิง API ไปหา Backend (ซ่อนปุ่มข้าม บังคับให้อยู่ตรงกลาง)
+  // 🎯 [God-Tier Frontend] ฟังก์ชันกดยืนยันแล้วยิง API ไปหา Backend (ให้คะแนนเสร็จแล้วอยู่หน้าเดิม)
   const confirmSendToJHCISQueue = async () => {
     setShowConfirmQueueModal(false); 
     setIsSubmitting(true); 
@@ -847,7 +847,7 @@ const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำ�
         setIsSubmitting(false); // ปิดหน้าต่างหมุนๆ Loading ทันที
         speak('บันทึกข้อมูลและจัดคิวเข้าสู่ระบบสำเร็จ ขอบคุณที่ใช้บริการค่ะ');
         
-        // 🌟 พระเอกของเรา: Custom UI/UX สำหรับให้คะแนนด้วย Emojis (ซ่อนปุ่มข้าม บังคับให้อยู่ตรงกลาง)
+        // 🌟 พระเอกของเรา: Custom UI/UX สำหรับให้คะแนนด้วย Emojis
         const { value: rating } = await Swal.fire({
             title: 'จัดคิวสำเร็จ!',
             width: '600px',
@@ -905,7 +905,7 @@ const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำ�
             confirmButtonColor: '#10b981',
             allowOutsideClick: false,
             preConfirm: () => {
-                const selectedScore = document.querySelector('input[name="kiosk_score"]:checked');
+                const selectedScore = document.querySelector('input[name="kiosk_score"]:checked') as HTMLInputElement;
                 if (!selectedScore) {
                     Swal.showValidationMessage('กรุณาเลือกความพึงพอใจอย่างน้อย 1 ระดับครับ');
                     return false;
@@ -933,10 +933,11 @@ const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำ�
                 timer: 2000,
                 showConfirmButton: false
             });
-            window.location.reload();
+            
+            // 🛡️ God-Tier Fix: ถอด window.location.reload(); ออกเพื่อให้ค้างอยู่หน้าเดิม
         }
-      } // <-- ปิด if (response.data...) 
-    } catch (error) { // <-- ปิด try หลัก และเริ่ม catch หลัก
+      } 
+    } catch (error) { 
       setIsSubmitting(false); // ปิดหน้าต่างหมุนๆ
       
       // 🛟 ระบบออฟไลน์ (กรณีเน็ตหลุด)
@@ -953,11 +954,11 @@ const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำ�
         message: 'ระบบเก็บข้อมูลของท่านไว้ใน Kiosk อย่างปลอดภัยแล้ว เจ้าหน้าที่จะซิงค์เข้าระบบให้ภายหลังครับ' 
       });
       
-      setTimeout(() => {
-        setNotifyModal(prev => ({ ...prev, show: false }));
-        window.location.reload(); 
+      setTimeout(() => { 
+        setNotifyModal(prev => ({ ...prev, show: false })); 
+        // 🛡️ God-Tier Fix: ถอด window.location.reload(); ออกจากกรณีออฟไลน์ด้วยเช่นกัน
       }, 4000);
-    } // <-- ปิด catch หลัก
+    } 
   }; // <-- ปิดฟังก์ชัน confirmSendToJHCISQueue อย่างสมบูรณ์ 100%
 
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
