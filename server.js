@@ -407,13 +407,18 @@ app.get('/jhcis-api/analytics', checkApiKey, async (req, res) => {
     try {
         connection = await mysql.createConnection(dbConfig);
         
-        // 1. นับจำนวนการใช้งานทั้งหมด และแยกเพศ (1=ชาย, 2=หญิง ตามมาตรฐาน JHCIS)
+        // 1. [God-Tier Query] นับจำนวนการใช้งาน แยกเพศ และคำนวณอายุจากตาราง person ของ JHCIS
         const [usageRows] = await connection.execute(`
             SELECT 
-                COUNT(*) as total_usage,
-                SUM(CASE WHEN sex = '1' THEN 1 ELSE 0 END) as male_count,
-                SUM(CASE WHEN sex = '2' THEN 1 ELSE 0 END) as female_count
-            FROM kiosk_usage_log
+                COUNT(l.id) as total_usage,
+                SUM(CASE WHEN l.sex = '1' THEN 1 ELSE 0 END) as male_count,
+                SUM(CASE WHEN l.sex = '2' THEN 1 ELSE 0 END) as female_count,
+                SUM(CASE WHEN TIMESTAMPDIFF(YEAR, p.birth, CURDATE()) <= 15 THEN 1 ELSE 0 END) as age_0_15,
+                SUM(CASE WHEN TIMESTAMPDIFF(YEAR, p.birth, CURDATE()) > 15 AND TIMESTAMPDIFF(YEAR, p.birth, CURDATE()) <= 35 THEN 1 ELSE 0 END) as age_16_35,
+                SUM(CASE WHEN TIMESTAMPDIFF(YEAR, p.birth, CURDATE()) > 35 AND TIMESTAMPDIFF(YEAR, p.birth, CURDATE()) <= 60 THEN 1 ELSE 0 END) as age_36_60,
+                SUM(CASE WHEN TIMESTAMPDIFF(YEAR, p.birth, CURDATE()) > 60 THEN 1 ELSE 0 END) as age_60_plus
+            FROM kiosk_usage_log l
+            LEFT JOIN person p ON l.cid = p.idcard
         `);
         const usage = usageRows[0];
 
@@ -425,15 +430,15 @@ app.get('/jhcis-api/analytics', checkApiKey, async (req, res) => {
             ORDER BY score DESC
         `);
 
-        // คำนวณเป็นเปอร์เซ็นต์
+        // คำนวณเป็นเปอร์เซ็นต์สำหรับกราฟ
         let totalRatings = 0;
         let totalScoreSum = 0;
         const chartData = [
-            { name: '5 ดาว (ดีเยี่ยม)', value: 0, color: '#10b981' }, // เขียว
-            { name: '4 ดาว (ดีมาก)', value: 0, color: '#84cc16' }, // เขียวอ่อน
-            { name: '3 ดาว (ปานกลาง)', value: 0, color: '#facc15' }, // เหลือง
-            { name: '2 ดาว (พอใช้)', value: 0, color: '#fb923c' }, // ส้ม
-            { name: '1 ดาว (ปรับปรุง)', value: 0, color: '#ef4444' }  // แดง
+            { name: '5 ดาว (ดีเยี่ยม)', value: 0, color: '#10b981' }, 
+            { name: '4 ดาว (ดีมาก)', value: 0, color: '#84cc16' }, 
+            { name: '3 ดาว (ปานกลาง)', value: 0, color: '#facc15' }, 
+            { name: '2 ดาว (พอใช้)', value: 0, color: '#fb923c' }, 
+            { name: '1 ดาว (ปรับปรุง)', value: 0, color: '#ef4444' }  
         ];
 
         ratingRows.forEach(row => {
@@ -441,33 +446,24 @@ app.get('/jhcis-api/analytics', checkApiKey, async (req, res) => {
             const score = Number(row.score);
             totalRatings += count;
             totalScoreSum += (score * count);
-            
-            // แมปข้อมูลลง Chart Data
             const chartIndex = 5 - score;
             if(chartData[chartIndex]) chartData[chartIndex].value = count;
         });
 
         const avgScore = totalRatings > 0 ? (totalScoreSum / totalRatings).toFixed(2) : 0;
-        const percentMale = usage.total_usage > 0 ? ((usage.male_count / usage.total_usage) * 100).toFixed(1) : 0;
-        const percentFemale = usage.total_usage > 0 ? ((usage.female_count / usage.total_usage) * 100).toFixed(1) : 0;
-
-        // 🧠 AI สรุปผลอัตโนมัติ (Executive Summary)
-        let summaryText = "ยังไม่มีข้อมูลเพียงพอสำหรับการสรุปผลวิจัย";
-        if (usage.total_usage > 0) {
-            summaryText = `จากการเก็บข้อมูลการใช้งานตู้ Kiosk พบว่ามีผู้ใช้บริการรวมทั้งสิ้น ${usage.total_usage} ครั้ง แบ่งเป็นเพศชาย ${percentMale}% และเพศหญิง ${percentFemale}% `;
-            if (totalRatings > 0) {
-                summaryText += `โดยมีผู้ร่วมประเมินความพึงพอใจ ${totalRatings} ครั้ง ได้คะแนนเฉลี่ย ${avgScore} จาก 5 คะแนนเต็ม ภาพรวมจัดอยู่ในเกณฑ์ ${
-                    avgScore >= 4.5 ? 'ดีเยี่ยม' : avgScore >= 3.5 ? 'ดีมาก' : avgScore >= 2.5 ? 'ปานกลาง' : 'ต้องปรับปรุง'
-                } แสดงให้เห็นว่านวัตกรรมนี้ช่วยเพิ่มประสิทธิภาพการให้บริการและได้รับการตอบรับที่ดีจากประชาชน เหมาะสมแก่การนำไปขยายผลและตีพิมพ์ผลงานวิจัยต่อไป`;
-            }
-        }
 
         res.status(200).json({
             success: true,
             data: {
                 usage: { total: usage.total_usage, male: usage.male_count, female: usage.female_count },
-                satisfaction: { total: totalRatings, average: avgScore, chartData: chartData },
-                summary: summaryText
+                // 🔴 ส่งข้อมูลช่วงอายุกลับไปให้ Frontend
+                ageGroups: { 
+                    gen1: usage.age_0_15 || 0, 
+                    gen2: usage.age_16_35 || 0, 
+                    gen3: usage.age_36_60 || 0, 
+                    gen4: usage.age_60_plus || 0 
+                },
+                satisfaction: { total: totalRatings, average: avgScore, chartData: chartData }
             }
         });
 
