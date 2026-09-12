@@ -1220,7 +1220,7 @@ const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำ�
                         </div>
                     </div>
 
-                    {/* แถวที่ 2: สถิติช่วงอายุ 4 ช่วง (God-Tier UI) */}
+                    {/* แถวที่ 2: สถิติช่วงอายุ 4 ช่วง */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '25px' }}>
                         <div style={{ background: '#fef3c7', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid #fde68a' }}>
                             <div style={{ color: '#d97706', fontSize: '12px', fontWeight: 'bold' }}>0-15 ปี</div>
@@ -1240,29 +1240,52 @@ const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำ�
                         </div>
                     </div>
 
-                    {/* แถวที่ 3: กราฟความพึงพอใจ (แสดงเต็มพื้นที่ สวยงามตาม Reference) */}
-                    <div style={{ background: 'white', padding: '30px', borderRadius: '15px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-                        <h3 style={{ margin: '0 0 10px 0', color: '#1e293b', fontSize: '18px', textAlign: 'center' }}>กราฟแสดงความพึงพอใจ</h3>
-                        <p style={{ textAlign: 'center', color: '#64748b', marginTop: 0, marginBottom: '20px' }}>คะแนนเฉลี่ย {analyticsData?.satisfaction?.average || 0} จาก 5 ดาว</p>
+                    {/* แถวที่ 3: กราฟความพึงพอใจ และ บทสรุป */}
+                    <div style={{ display: 'flex', gap: '20px', background: 'white', padding: '20px', borderRadius: '15px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
                         
-                        <div style={{ width: '100%', height: '300px', display: 'flex', justifyContent: 'center' }}>
-                            {analyticsData?.satisfaction?.chartData?.filter((d:any) => d.value > 0).length > 0 ? (
-                                <PieChart width={400} height={300}>
-                                    <Pie 
-                                        data={analyticsData.satisfaction.chartData.filter((d:any) => d.value > 0)} 
-                                        cx="50%" cy="50%" innerRadius={80} outerRadius={110} paddingAngle={5} dataKey="value"
-                                    >
-                                        {analyticsData.satisfaction.chartData.filter((d:any) => d.value > 0).map((entry:any, index:number) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip formatter={(value: any) => [`${value} โหวต`, 'จำนวน']} />
-                                    <Legend verticalAlign="bottom" height={36} iconType="circle"/>
-                                </PieChart>
-                            ) : (
-                                <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>ยังไม่มีข้อมูลการประเมิน</div>
-                            )}
+                        {/* ฝั่งซ้าย: กราฟ */}
+                        <div style={{ flex: 1 }}>
+                            <h3 style={{ margin: '0 0 10px 0', color: '#1e293b', fontSize: '18px', textAlign: 'center' }}>กราฟแสดงความพึงพอใจ</h3>
+                            <p style={{ textAlign: 'center', color: '#64748b', marginTop: 0, marginBottom: '20px' }}>คะแนนเฉลี่ย {analyticsData?.satisfaction?.average || 0} จาก 5 ดาว</p>
+                            
+                            <div style={{ width: '100%', height: '250px', display: 'flex', justifyContent: 'center' }}>
+                                {analyticsData?.satisfaction?.chartData?.filter((d:any) => d.value > 0).length > 0 ? (
+                                    <PieChart width={300} height={250}>
+                                        <Pie 
+                                            data={analyticsData.satisfaction.chartData.filter((d:any) => d.value > 0)} 
+                                            cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value"
+                                        >
+                                            {analyticsData.satisfaction.chartData.filter((d:any) => d.value > 0).map((entry:any, index:number) => (
+                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip formatter={(value: any) => [`${value} โหวต`, 'จำนวน']} />
+                                        <Legend verticalAlign="bottom" height={36} iconType="circle"/>
+                                    </PieChart>
+                                ) : (
+                                    <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>ยังไม่มีข้อมูลการประเมิน</div>
+                                )}
+                            </div>
                         </div>
+
+                        {/* ฝั่งขวา: AI สรุปผลงานวิจัย */}
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', borderLeft: '4px solid #8b5cf6', flex: 1 }}>
+                                <h3 style={{ margin: '0 0 15px 0', color: '#4c1d95', fontSize: '16px', display: 'flex', alignItems: 'center', gap:'8px' }}>
+                                    <i className="fa-solid fa-robot"></i> AI สรุปผลสำหรับงานวิจัย
+                                </h3>
+                                <p style={{ fontSize: '15px', color: '#334155', lineHeight: '1.8', margin: 0, textIndent: '25px', textAlign: 'justify' }}>
+                                    {analyticsData?.summary || 'ยังไม่มีข้อมูลเพียงพอสำหรับสรุปผล'}
+                                </p>
+                            </div>
+                            <button onClick={() => {
+                                navigator.clipboard.writeText(analyticsData?.summary || '');
+                                alert('คัดลอกข้อความสรุปผลวิจัยเรียบร้อยแล้ว!');
+                            }} style={{ marginTop: '15px', padding: '12px', background: '#e0e7ff', color: '#4338ca', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                <i className="fa-regular fa-copy"></i> คัดลอกข้อความไปใส่ Word
+                            </button>
+                        </div>
+
                     </div>
                   </>
                 )}
