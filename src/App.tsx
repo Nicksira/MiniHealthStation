@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
+import Swal from 'sweetalert2';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const API_BASE_URL = 'https://api.miniheealthstation.com';
 const API_KEY = 'ThapPhrik_Secret_Key_9988';
@@ -12,8 +14,9 @@ function App() {
   const [patientPhoto, setPatientPhoto] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   
-  // 🟢 State สำหรับ Admin ลับ และระบบ Offline
-  const [adminTab, setAdminTab] = useState<'settings' | 'data'>('settings');
+  const [adminTab, setAdminTab] = useState<'settings' | 'data' | 'analytics'>('settings');
+const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำหรับเก็บข้อมูลกราฟ
+
   const [offlineQueue, setOfflineQueue] = useState<any[]>(JSON.parse(localStorage.getItem('offline_queue') || '[]'));
 
   // 🟢 State สำหรับ AI ผู้ช่วยประเมิน
@@ -815,7 +818,7 @@ function App() {
     setShowConfirmQueueModal(true);
   };
 
-  // 🎯 [God-Tier Frontend] ฟังก์ชันกดยืนยันแล้วยิง API ไปหา Backend (server.js)
+  // 🎯 [God-Tier Frontend] ฟังก์ชันกดยืนยันแล้วยิง API ไปหา Backend (ซ่อนปุ่มข้าม บังคับให้อยู่ตรงกลาง)
   const confirmSendToJHCISQueue = async () => {
     setShowConfirmQueueModal(false); 
     setIsSubmitting(true); 
@@ -828,31 +831,114 @@ function App() {
       sysDia: vitals.sysDia === '---' ? '' : vitals.sysDia, 
       pulse: vitals.pulse === '' || vitals.pulse === '---' ? 0 : parseInt(vitals.pulse),
       temp: vitals.temp === '' || vitals.temp === '---' ? 0 : parseFloat(vitals.temp),
-      
-      // ✅ รอบเอว (waist)
       waist: vitals.waist === '' || vitals.waist === '---' ? 0 : parseFloat(vitals.waist),
-      
-      // 🚨 พระเอกของเรา! ห่อข้อความน้ำตาลในเลือดส่งไปด้วย
       sugarText: vitals.sugar === '' || vitals.sugar === '---' ? '' : `น้ำตาลในเลือด ${vitals.sugar}`,
       sugar: vitals.sugar === '' || vitals.sugar === '---' ? '' : vitals.sugar
     };
     
     try {
-      // 🚀 ยิง Payload ด้านบนทะลุ Cloudflare Tunnel ไปหา server.js
+      // 🚀 ยิง Payload ทะลุ Cloudflare Tunnel ไปหา API 1
       const response = await axios.post(`${API_BASE_URL}/jhcis-api/queue`, payload, {
         headers: { 'x-api-key': API_KEY },
         timeout: 5000 
       });
 
       if (response.data || response.status === 200) {
+        setIsSubmitting(false); // ปิดหน้าต่างหมุนๆ Loading ทันที
         speak('บันทึกข้อมูลและจัดคิวเข้าสู่ระบบสำเร็จ ขอบคุณที่ใช้บริการค่ะ');
-        setNotifyModal({ show: true, isSuccess: true, title: 'จัดคิวสำเร็จ!', message: 'ส่งข้อมูลผู้ป่วยเข้าสู่ระบบ JHCIS เรียบร้อยแล้ว' });
         
-        setTimeout(() => {
-          setNotifyModal(prev => ({ ...prev, show: false }));
-        }, 3000);
-      }
-    } catch (error) {
+        // 🌟 พระเอกของเรา: Custom UI/UX สำหรับให้คะแนนด้วย Emojis (ซ่อนปุ่มข้าม บังคับให้อยู่ตรงกลาง)
+        const { value: rating } = await Swal.fire({
+            title: 'จัดคิวสำเร็จ!',
+            width: '600px',
+            html: `
+                <p style="margin: 0 0 25px 0; font-size: 18px; color: #4B5563;">การให้บริการในวันนี้เป็นอย่างไรบ้างครับ?</p>
+                
+                <style>
+                    .kiosk-rating-group { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin: 10px 10px 20px 10px; }
+                    .rating-option { cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 10px; flex: 1; padding: 10px; border-radius: 15px; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+                    .rating-option input[type="radio"] { display: none; }
+                    .rating-icon { font-size: 55px; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); filter: grayscale(80%) opacity(50%); }
+                    .rating-label { font-size: 16px; font-weight: bold; color: #9CA3AF; transition: color 0.3s; }
+                    
+                    .rating-option:nth-child(1) .rating-icon { color: #E53935; }
+                    .rating-option:nth-child(2) .rating-icon { color: #FB8C00; }
+                    .rating-option:nth-child(3) .rating-icon { color: #FBC02D; }
+                    .rating-option:nth-child(4) .rating-icon { color: #7CB342; }
+                    .rating-option:nth-child(5) .rating-icon { color: #43A047; }
+
+                    .rating-option:hover .rating-icon { filter: grayscale(0%) opacity(100%); transform: scale(1.1); }
+                    .rating-option input[type="radio"]:checked + .rating-icon { filter: grayscale(0%) opacity(100%); transform: scale(1.25); filter: drop-shadow(0px 8px 10px rgba(0,0,0,0.2)); }
+                    .rating-option input[type="radio"]:checked ~ .rating-label { color: #1F2937; transform: scale(1.1); }
+                </style>
+
+                <div class="kiosk-rating-group">
+                    <label class="rating-option">
+                        <input type="radio" name="kiosk_score" value="1">
+                        <i class="fa-solid fa-face-angry rating-icon"></i>
+                        <span class="rating-label">แย่มาก</span>
+                    </label>
+                    <label class="rating-option">
+                        <input type="radio" name="kiosk_score" value="2">
+                        <i class="fa-solid fa-face-frown rating-icon"></i>
+                        <span class="rating-label">ปรับปรุง</span>
+                    </label>
+                    <label class="rating-option">
+                        <input type="radio" name="kiosk_score" value="3">
+                        <i class="fa-solid fa-face-meh rating-icon"></i>
+                        <span class="rating-label">ปานกลาง</span>
+                    </label>
+                    <label class="rating-option">
+                        <input type="radio" name="kiosk_score" value="4">
+                        <i class="fa-solid fa-face-smile rating-icon"></i>
+                        <span class="rating-label">ดีมาก</span>
+                    </label>
+                    <label class="rating-option">
+                        <input type="radio" name="kiosk_score" value="5">
+                        <i class="fa-solid fa-face-laugh-beam rating-icon"></i>
+                        <span class="rating-label">ดีเยี่ยม</span>
+                    </label>
+                </div>
+            `,
+            showCancelButton: false,
+            confirmButtonText: 'ส่งคะแนน',
+            confirmButtonColor: '#10b981',
+            allowOutsideClick: false,
+            preConfirm: () => {
+                const selectedScore = document.querySelector('input[name="kiosk_score"]:checked');
+                if (!selectedScore) {
+                    Swal.showValidationMessage('กรุณาเลือกความพึงพอใจอย่างน้อย 1 ระดับครับ');
+                    return false;
+                }
+                return selectedScore.value;
+            }
+        });
+
+        if (rating) {
+            try {
+                // 🚀 ยิงคะแนนไปที่ API 7 (ระบบเก็บคะแนน)
+                await axios.post(`${API_BASE_URL}/jhcis-api/rating`, {
+                    cid: patient.cid, 
+                    visitno: null, 
+                    score: parseInt(rating)
+                }, { headers: { 'x-api-key': API_KEY } });
+            } catch (err) {
+                console.error('[System] บันทึกคะแนนไม่สำเร็จ แต่คิวหลักจัดเรียบร้อยแล้ว:', err);
+            }
+            
+            await Swal.fire({
+                title: 'ขอบคุณครับ!',
+                text: 'ระบบบันทึกคะแนนของคุณเรียบร้อยแล้ว',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+            });
+            window.location.reload();
+        }
+      } // <-- ปิด if (response.data...) 
+    } catch (error) { // <-- ปิด try หลัก และเริ่ม catch หลัก
+      setIsSubmitting(false); // ปิดหน้าต่างหมุนๆ
+      
       // 🛟 ระบบออฟไลน์ (กรณีเน็ตหลุด)
       const savedOffline = JSON.parse(localStorage.getItem('offline_queue') || '[]');
       savedOffline.push({ ...payload, name: `${patient.fname} ${patient.lname}`, timestamp: new Date().toLocaleString('th-TH') });
@@ -869,11 +955,10 @@ function App() {
       
       setTimeout(() => {
         setNotifyModal(prev => ({ ...prev, show: false }));
+        window.location.reload(); 
       }, 4000);
-    } finally {
-      setIsSubmitting(false); 
-    }
-  };
+    } // <-- ปิด catch หลัก
+  }; // <-- ปิดฟังก์ชัน confirmSendToJHCISQueue อย่างสมบูรณ์ 100%
 
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const audioCacheRef = useRef<{ [key: string]: string }>({});
@@ -1047,11 +1132,19 @@ function App() {
           <div style={{ background: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', maxWidth: '600px', margin: '0 auto' }}>
             
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #EEE', paddingBottom: '10px' }}>
-              <button onClick={() => setAdminTab('settings')} style={{ flex: 1, padding: '10px', background: adminTab === 'settings' ? '#007AFF' : '#f1f5f9', color: adminTab === 'settings' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>⚙️ ตั้งค่าระบบ</button>
-              <button onClick={() => setAdminTab('data')} style={{ flex: 1, padding: '10px', background: adminTab === 'data' ? '#10b981' : '#f1f5f9', color: adminTab === 'data' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}>📊 ข้อมูลค้างส่ง (Offline)</button>
+              <button onClick={() => setAdminTab('settings')} style={{ flex: 1, padding: '10px', background: adminTab === 'settings' ? '#007AFF' : '#f1f5f9', color: adminTab === 'settings' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', transition: '0.3s' }}>⚙️ ตั้งค่าระบบ</button>
+              <button onClick={() => setAdminTab('data')} style={{ flex: 1, padding: '10px', background: adminTab === 'data' ? '#f59e0b' : '#f1f5f9', color: adminTab === 'data' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', transition: '0.3s' }}>💾 ข้อมูลค้างส่ง</button>
+              
+              <button onClick={async () => {
+                  setAdminTab('analytics');
+                  try {
+                      const res = await axios.get(`${API_BASE_URL}/jhcis-api/analytics`, { headers: { 'x-api-key': API_KEY } });
+                      if(res.data && res.data.success) setAnalyticsData(res.data.data);
+                  } catch(e) { console.error('ดึงข้อมูลสถิติไม่สำเร็จ'); }
+              }} style={{ flex: 1, padding: '10px', background: adminTab === 'analytics' ? '#8b5cf6' : '#f1f5f9', color: adminTab === 'analytics' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', transition: '0.3s' }}>📈 สถิติงานวิจัย</button>
             </div>
 
-            {adminTab === 'settings' ? (
+            {adminTab === 'settings' && (
               <>
                 <h2 style={{ color: '#007AFF', marginBottom: '20px', borderBottom: '2px solid #EEE', paddingBottom: '10px' }}> ตั้งค่าระบบ (Settings)</h2>
                 <div style={{ marginBottom: '15px' }}><label style={{ fontWeight: 'bold', display: 'block', marginBottom: '6px' }}> เปลี่ยนรูปโลโก้หน่วยงาน</label><input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'block', width: '100%', padding: '10px', background: '#F2F2F7', borderRadius: '8px' }} /></div>
@@ -1071,30 +1164,101 @@ function App() {
                   <button onClick={saveConfig} style={{ padding: '12px 30px', background: '#34C759', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold' }}>💾 บันทึกและเชื่อมต่อ</button>
                 </div>
               </>
-            ) : (
+            )}
+
+            {/* โซนแสดงหน้าข้อมูลค้างส่ง */}
+            {adminTab === 'data' && (
               <div>
-                <h3 style={{ color: '#10b981', marginTop: '0' }}>รายการคิวที่ค้างส่งเข้าระบบ JHCIS ({offlineQueue.length} รายการ)</h3>
+                <h3 style={{ color: '#10b981', marginTop: '0' }}>คิวค้างส่ง ({Array.isArray(offlineQueue) ? offlineQueue.length : 0} รายการ)</h3>
                 <div style={{ maxHeight: '350px', overflowY: 'auto', background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  {offlineQueue.length === 0 ? <p style={{ textAlign: 'center', color: '#94a3b8', margin: '20px 0' }}>ไม่มีข้อมูลค้างส่ง</p> : 
-                    offlineQueue.map((q, idx) => (
+                  
+                  {/* 🛡️ God-Tier Fix: ใช้เงื่อนไขเชิงบวก (Positive Check) ควบคู่ Optional Chaining (?.) เพื่อล้างขีดแดงจาก TypeScript แบบถอนรากถอนโคน */}
+                  {Array.isArray(offlineQueue) && offlineQueue.length > 0 ? (
+                    offlineQueue?.map((q: any, idx: number) => (
                       <div key={idx} style={{ background: 'white', padding: '12px', marginBottom: '10px', borderRadius: '6px', borderLeft: '4px solid #f59e0b', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                        <strong style={{ fontSize: '16px' }}>{q.name}</strong> <span style={{ color: '#64748b' }}>(CID: {q.cid})</span><br/>
-                        <div style={{ color: '#475569', fontSize: '14px', marginTop: '5px' }}>ความดัน: <span style={{ fontWeight: 'bold' }}>{q.sysDia}</span> | น้ำหนัก: <span style={{ fontWeight: 'bold' }}>{q.weight}</span></div>
-                        <small style={{ color: '#94a3b8', display: 'block', marginTop: '5px' }}>บันทึกเวลา: {q.timestamp}</small>
+                        <strong>{q?.name || 'ไม่ระบุชื่อ'}</strong> <span style={{ color: '#64748b' }}>(CID: {q?.cid || '-'})</span><br/>
+                        <div style={{ color: '#475569', fontSize: '14px', marginTop: '5px' }}>ความดัน: <span style={{ fontWeight: 'bold' }}>{q?.sysDia || '-'}</span> | น้ำหนัก: <span style={{ fontWeight: 'bold' }}>{q?.weight || '-'}</span></div>
+                        <small style={{ color: '#94a3b8', display: 'block', marginTop: '5px' }}>บันทึกเวลา: {q?.timestamp || '-'}</small>
                       </div>
                     ))
-                  }
+                  ) : (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', margin: '20px 0' }}>ไม่มีข้อมูล</p>
+                  )}
+
                 </div>
                 <div style={{ display: 'flex', gap: '15px', marginTop: '20px', justifyContent: 'space-between' }}>
-                  <button onClick={() => { if(window.confirm('ต้องการลบข้อมูลค้างส่งทั้งหมดใช่หรือไม่?')) { localStorage.setItem('offline_queue', '[]'); setOfflineQueue([]); } }} style={{ padding: '12px 20px', background: '#ef4444', color: 'white', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>ลบทิ้งทั้งหมด</button>
+                  <button onClick={() => { if(window.confirm('ยืนยันลบข้อมูลทั้งหมด?')) { localStorage.setItem('offline_queue', '[]'); setOfflineQueue([]); } }} style={{ padding: '12px 20px', background: '#ef4444', color: 'white', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>ลบทิ้งทั้งหมด</button>
                   <button onClick={() => alert("ระบบซิงค์จะทยอยส่งข้อมูลอัตโนมัติเมื่อเซิร์ฟเวอร์ออนไลน์ครับ")} style={{ padding: '12px 20px', background: '#3b82f6', color: 'white', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>🔄 ซิงค์ขึ้น JHCIS</button>
                 </div>
+              </div>
+            )}
+
+            {/* โซนแสดงหน้าสถิติงานวิจัย */}
+            {adminTab === 'analytics' && (
+              <div style={{ animation: 'fadeIn 0.5s' }}>
+                <h2 style={{ color: '#8b5cf6', margin: '0 0 20px 0', borderBottom: '2px solid #ede9fe', paddingBottom: '10px' }}>
+                  <i className="fa-solid fa-chart-pie"></i> Dashboard สถิติ
+                </h2>
+                {!analyticsData ? (
+                   <div style={{ textAlign: 'center', padding: '40px', color: '#8b5cf6' }}><p>กำลังโหลด...</p></div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginBottom: '25px' }}>
+                        <div style={{ background: '#eff6ff', padding: '20px', borderRadius: '15px', textAlign: 'center', border: '1px solid #bfdbfe' }}>
+                            <div style={{ color: '#3b82f6', fontSize: '14px', fontWeight: 'bold' }}>ยอดค้นหาประวัติ</div>
+                            <div style={{ color: '#1d4ed8', fontSize: '36px', fontWeight: 'bold' }}>{analyticsData?.usage?.total || 0}</div>
+                        </div>
+                        <div style={{ background: '#f0fdf4', padding: '20px', borderRadius: '15px', textAlign: 'center', border: '1px solid #bbf7d0' }}>
+                            <div style={{ color: '#22c55e', fontSize: '14px', fontWeight: 'bold' }}>เพศชาย</div>
+                            <div style={{ color: '#15803d', fontSize: '36px', fontWeight: 'bold' }}>{analyticsData?.usage?.male || 0}</div>
+                        </div>
+                        <div style={{ background: '#fdf2f8', padding: '20px', borderRadius: '15px', textAlign: 'center', border: '1px solid #fbcfe8' }}>
+                            <div style={{ color: '#ec4899', fontSize: '14px', fontWeight: 'bold' }}>เพศหญิง</div>
+                            <div style={{ color: '#be185d', fontSize: '36px', fontWeight: 'bold' }}>{analyticsData?.usage?.female || 0}</div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '20px', background: 'white', padding: '20px', borderRadius: '15px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                        <div style={{ flex: 1 }}>
+                            <h3 style={{ margin: '0 0 10px 0', color: '#1e293b', fontSize: '16px', textAlign: 'center' }}>กราฟแสดงความพึงพอใจ</h3>
+                            <div style={{ width: '100%', height: '250px', display: 'flex', justifyContent: 'center' }}>
+                                {/* 🛡️ God-Tier Fix: ถอดฟังก์ชันซ้อนทับออก และบังคับ Type (value: any) ป้องกันเส้นแดงและจอขาว 100% */}
+                                {analyticsData?.satisfaction?.chartData?.filter((d:any) => d.value > 0).length > 0 ? (
+                                    <PieChart width={300} height={250}>
+                                        <Pie 
+                                            data={analyticsData.satisfaction.chartData.filter((d:any) => d.value > 0)} 
+                                            cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value"
+                                        >
+                                            {analyticsData.satisfaction.chartData.filter((d:any) => d.value > 0).map((entry:any, index:number) => (
+                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                            ))}
+                                        </Pie>
+                                        {/* 🔴 แก้จุดแดงตรงนี้เรียบร้อยแล้ว */}
+                                        <Tooltip formatter={(value: any) => [`${value} โหวต`, 'จำนวน']} />
+                                        <Legend verticalAlign="bottom" height={36}/>
+                                    </PieChart>
+                                ) : (
+                                    <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>ไม่มีข้อมูล</div>
+                                )}
+                            </div>
+                        </div>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '12px', borderLeft: '4px solid #8b5cf6', flex: 1 }}>
+                                <h3 style={{ margin: '0 0 15px 0', color: '#4c1d95', fontSize: '16px', display: 'flex', alignItems: 'center', gap:'8px' }}>สรุปผลสำหรับงานวิจัย</h3>
+                                <p style={{ fontSize: '15px', color: '#334155', lineHeight: '1.8', margin: 0, textAlign: 'justify' }}>{analyticsData?.summary || 'ไม่มีข้อมูล'}</p>
+                            </div>
+                            <button onClick={() => { navigator.clipboard.writeText(analyticsData?.summary || ''); alert('คัดลอกเรียบร้อย!'); }} style={{ marginTop: '15px', padding: '12px', background: '#e0e7ff', color: '#4338ca', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>คัดลอก</button>
+                        </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
             
           </div>
         </main>
       ) : !isLoggedIn ? (
+      
         <main className="home-screen" style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
           <video key={customVideo} autoPlay loop playsInline style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0, opacity: 0.4 }}><source src={customVideo} type="video/mp4" /></video>
           

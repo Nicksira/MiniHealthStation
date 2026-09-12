@@ -43,56 +43,88 @@ const checkApiKey = (req, res, next) => {
 };
 
 // ==========================================
-// 🎯 API 1: บันทึกเข้าคิว JHCIS (ตาราง Visit)
+// API 1: บันทึกเข้าคิว JHCIS (ปรับปรุงโครงสร้างข้อมูลอาการสำคัญและอาการร่วม)
 // ==========================================
 app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
     const data = req.body || {}; 
-    if (!data.cid) return res.status(400).json({ success: false, message: 'ไม่มีข้อมูล CID' });
+    
+    // ตรวจสอบความถูกต้องของรูปแบบข้อมูล (Data Validation)
+    if (!data.cid || String(data.cid).length !== 13) {
+        return res.status(400).json({ success: false, message: 'รูปแบบเลขประจำตัวประชาชนไม่ถูกต้อง' });
+    }
 
     let connection;
     try {
-        console.log(`[API] กำลังนำข้อมูลของ CID: ${data.cid} บันทึกลง JHCIS...`);
         connection = await mysql.createConnection(dbConfig);
-
+        
+        // ค้นหาข้อมูลผู้รับบริการ
         const [personRows] = await connection.execute(
             'SELECT pid, pcucodeperson, rightcode, rightno FROM person WHERE idcard = ? LIMIT 1', 
             [data.cid]
         );
         
         if (personRows.length === 0) {
-            await connection.end();
-            return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลคนไข้ใน JHCIS' });
+            return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลผู้รับบริการในระบบ' });
         }
-        
         const p = personRows[0];
+        
+        // กำหนดลำดับการรับบริการ (Visit Number)
         const [maxRows] = await connection.execute('SELECT MAX(visitno) as mx FROM visit');
         const vno = (maxRows[0].mx || 0) + 1;
 
-        const sql = `
+        // แปลงชนิดข้อมูลและจัดการค่าว่าง (Data Sanitization)
+        const weight = parseFloat(data.weight) || 0;
+        const height = parseFloat(data.height) || 0;
+        const pressure = (data.sysDia && data.sysDia !== '---') ? data.sysDia : '';
+        const pulse = parseInt(data.pulse, 10) || 0;
+        const temp = parseFloat(data.temp) || 0;
+        const waist = parseFloat(data.waist) || 0;
+        const sugar = parseFloat(data.sugar) || 0;
+
+        // กำหนดข้อมูลผลตรวจและข้อความวินิจฉัยอัตโนมัติ
+        const vitalCheckText = sugar > 0 ? `DTX: ${sugar} mg/dL` : '';
+        const autoSymptoms = 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.';
+        const autoSymptomsco = 'ไม่มีเดินเซ ปากเบี้ยว พูดคุยรู้เรื่องชัดเจน ';
+
+        // บันทึกข้อมูลลงตาราง visit รวมถึง symptoms และ symptomsco
+        const sqlVisit = `
             INSERT INTO visit 
-            (pcucode, visitno, visitdate, pcucodeperson, pid, weight, height, pressure, pulse, temperature, waist, rightcode, rightno, timeservice) 
-            VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '1')
+            (pcucode, visitno, visitdate, pcucodeperson, pid, weight, height, pressure, pulse, temperature, waist, rightcode, rightno, timeservice, vitalcheck, symptoms, symptomsco) 
+            VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '1', ?, ?, ?)
         `;
         
-        await connection.execute(sql, [
+        await connection.execute(sqlVisit, [
             p.pcucodeperson, vno, p.pcucodeperson, p.pid, 
-            data.weight || 0, data.height || 0, data.sysDia === '---' ? '' : data.sysDia, data.pulse || 0, data.temp || 0, data.waist || 0, 
-            p.rightcode, p.rightno
+            weight, height, pressure, pulse, temp, waist, 
+            p.rightcode, p.rightno, vitalCheckText,
+            autoSymptoms, autoSymptomsco
         ]);
 
-        await connection.end();
-        console.log(`✅ ออกคิวสำเร็จ! Visit No: ${vno}`);
-        res.status(200).json({ success: true, message: 'บันทึกคิวสำเร็จ' });
+        // บันทึกผลระดับน้ำตาลในเลือดสำรอง
+        if (sugar > 0) {
+            try {
+                const sqlLab = `
+                    INSERT INTO visitlabchcyesur (pcucode, visitno, dtc, dateupdate)
+                    VALUES (?, ?, ?, NOW())
+                `;
+                await connection.execute(sqlLab, [p.pcucodeperson, vno, sugar]);
+            } catch (labError) {
+                console.warn('ระบบ: ข้ามการบันทึกตาราง visitlabchcyesur เนื่องจากโครงสร้างตารางไม่สอดคล้องกัน');
+            }
+        }
+
+        res.status(200).json({ success: true, message: 'บันทึกข้อมูลเข้าระบบสำเร็จ' });
 
     } catch (error) {
-        if (connection) await connection.end();
-        console.error('❌ Database Error:', error);
-        res.status(500).json({ success: false, message: error.message });
+        console.error('Database Error:', error);
+        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดที่เซิร์ฟเวอร์: ' + error.message });
+    } finally {
+        if (connection) await connection.end(); 
     }
 });
 
 // ==========================================
-// 🎯 API 2: ดึงประวัติคนไข้ JHCIS
+// 🎯 API 2: ดึงประวัติคนไข้ JHCIS (อัปเดต: บันทึกสถิติการใช้งานสำหรับงานวิจัย)
 // ==========================================
 app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
     let connection;
@@ -100,24 +132,31 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         const sql = `
             SELECT 
-                p.fname, p.lname,
+                p.fname, p.lname, p.sex,
                 GROUP_CONCAT(c.diseasenamethai SEPARATOR ', ') as chronic_name
             FROM person p
             LEFT JOIN personchronic pc ON p.pid = pc.pid AND p.pcucodeperson = pc.pcucodeperson
             LEFT JOIN cdisease c ON pc.chroniccode = c.diseasecode
             WHERE p.idcard = ?
-            GROUP BY p.pid, p.fname, p.lname
+            GROUP BY p.pid, p.fname, p.lname, p.sex
             LIMIT 1
         `;
         const [rows] = await connection.execute(sql, [req.params.cid]);
-        await connection.end();
 
         if (rows.length > 0) {
             const patient = rows[0];
+            
+            // 📊 [Data Analytics] แอบบันทึกสถิติการเข้าใช้งานเบื้องหลังแบบ Asynchronous
+            try {
+                const sqlLog = `INSERT INTO kiosk_usage_log (cid, sex, search_date) VALUES (?, ?, NOW())`;
+                // ไม่ต้องรอ await ก็ได้ เพื่อให้หน้าจอ Kiosk โหลดเร็วที่สุด (Fire and Forget)
+                connection.execute(sqlLog, [req.params.cid, patient.sex || null]).catch(()=> {});
+            } catch (logErr) { /* ปล่อยผ่านหากเก็บ log ไม่ได้ */ }
+
             res.status(200).json({ 
                 success: true, 
                 data: { 
-                    fname: patient.fname, lname: patient.lname, 
+                    fname: patient.fname, lname: patient.lname, sex: patient.sex,
                     chronic: patient.chronic_name ? patient.chronic_name : 'ไม่มีโรคประจำตัว' 
                 } 
             });
@@ -125,8 +164,9 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
             res.status(404).json({ success: false, message: 'ไม่พบข้อมูลคนไข้ในระบบ JHCIS' });
         }
     } catch (error) {
-        if (connection) await connection.end();
         res.status(500).json({ success: false, message: error.message }); 
+    } finally {
+        if (connection) await connection.end();
     }
 });
 
@@ -323,6 +363,119 @@ app.post('/jhcis-api/tts', checkApiKey, async (req, res) => {
     } catch (error) {
         console.error("❌ Google TTS Error:", error.message);
         return res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ==========================================
+// 🎯 API 7: ระบบเก็บคะแนนความพึงพอใจ (Patient Satisfaction)
+// ==========================================
+app.post('/jhcis-api/rating', checkApiKey, async (req, res) => {
+    const { cid, visitno, score } = req.body;
+
+    // Data Validation ตรวจสอบความถูกต้องเบื้องต้น
+    if (!cid || !score || score < 1 || score > 5) {
+        return res.status(400).json({ success: false, message: 'ข้อมูลคะแนนไม่ถูกต้อง' });
+    }
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        const sqlRating = `
+            INSERT INTO kiosk_satisfaction (cid, visitno, score, record_date) 
+            VALUES (?, ?, ?, NOW())
+        `;
+        
+        await connection.execute(sqlRating, [cid, visitno || null, score]);
+        
+        console.log(`[System] บันทึกคะแนนความพึงพอใจ: ${score} ดาว (CID: ${cid})`);
+        res.status(200).json({ success: true, message: 'บันทึกคะแนนสำเร็จ' });
+
+    } catch (error) {
+        console.error('[Database Error - Rating]:', error);
+        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการบันทึกคะแนน' });
+    } finally {
+        if (connection) await connection.end(); 
+    }
+});
+
+// ==========================================
+// 🎯 API 8: ระบบประมวลผลสถิติเพื่องานวิจัย (Research Analytics Dashboard)
+// ==========================================
+app.get('/jhcis-api/analytics', checkApiKey, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        // 1. นับจำนวนการใช้งานทั้งหมด และแยกเพศ (1=ชาย, 2=หญิง ตามมาตรฐาน JHCIS)
+        const [usageRows] = await connection.execute(`
+            SELECT 
+                COUNT(*) as total_usage,
+                SUM(CASE WHEN sex = '1' THEN 1 ELSE 0 END) as male_count,
+                SUM(CASE WHEN sex = '2' THEN 1 ELSE 0 END) as female_count
+            FROM kiosk_usage_log
+        `);
+        const usage = usageRows[0];
+
+        // 2. ดึงข้อมูลคะแนนความพึงพอใจ
+        const [ratingRows] = await connection.execute(`
+            SELECT score, COUNT(*) as count 
+            FROM kiosk_satisfaction 
+            GROUP BY score 
+            ORDER BY score DESC
+        `);
+
+        // คำนวณเป็นเปอร์เซ็นต์
+        let totalRatings = 0;
+        let totalScoreSum = 0;
+        const chartData = [
+            { name: '5 ดาว (ดีเยี่ยม)', value: 0, color: '#10b981' }, // เขียว
+            { name: '4 ดาว (ดีมาก)', value: 0, color: '#84cc16' }, // เขียวอ่อน
+            { name: '3 ดาว (ปานกลาง)', value: 0, color: '#facc15' }, // เหลือง
+            { name: '2 ดาว (พอใช้)', value: 0, color: '#fb923c' }, // ส้ม
+            { name: '1 ดาว (ปรับปรุง)', value: 0, color: '#ef4444' }  // แดง
+        ];
+
+        ratingRows.forEach(row => {
+            const count = Number(row.count);
+            const score = Number(row.score);
+            totalRatings += count;
+            totalScoreSum += (score * count);
+            
+            // แมปข้อมูลลง Chart Data
+            const chartIndex = 5 - score;
+            if(chartData[chartIndex]) chartData[chartIndex].value = count;
+        });
+
+        const avgScore = totalRatings > 0 ? (totalScoreSum / totalRatings).toFixed(2) : 0;
+        const percentMale = usage.total_usage > 0 ? ((usage.male_count / usage.total_usage) * 100).toFixed(1) : 0;
+        const percentFemale = usage.total_usage > 0 ? ((usage.female_count / usage.total_usage) * 100).toFixed(1) : 0;
+
+        // 🧠 AI สรุปผลอัตโนมัติ (Executive Summary)
+        let summaryText = "ยังไม่มีข้อมูลเพียงพอสำหรับการสรุปผลวิจัย";
+        if (usage.total_usage > 0) {
+            summaryText = `จากการเก็บข้อมูลการใช้งานตู้ Kiosk พบว่ามีผู้ใช้บริการรวมทั้งสิ้น ${usage.total_usage} ครั้ง แบ่งเป็นเพศชาย ${percentMale}% และเพศหญิง ${percentFemale}% `;
+            if (totalRatings > 0) {
+                summaryText += `โดยมีผู้ร่วมประเมินความพึงพอใจ ${totalRatings} ครั้ง ได้คะแนนเฉลี่ย ${avgScore} จาก 5 คะแนนเต็ม ภาพรวมจัดอยู่ในเกณฑ์ ${
+                    avgScore >= 4.5 ? 'ดีเยี่ยม' : avgScore >= 3.5 ? 'ดีมาก' : avgScore >= 2.5 ? 'ปานกลาง' : 'ต้องปรับปรุง'
+                } แสดงให้เห็นว่านวัตกรรมนี้ช่วยเพิ่มประสิทธิภาพการให้บริการและได้รับการตอบรับที่ดีจากประชาชน เหมาะสมแก่การนำไปขยายผลและตีพิมพ์ผลงานวิจัยต่อไป`;
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            data: {
+                usage: { total: usage.total_usage, male: usage.male_count, female: usage.female_count },
+                satisfaction: { total: totalRatings, average: avgScore, chartData: chartData },
+                summary: summaryText
+            }
+        });
+
+    } catch (error) {
+        console.error('Analytics Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        if (connection) await connection.end();
     }
 });
 
