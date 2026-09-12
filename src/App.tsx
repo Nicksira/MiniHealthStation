@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 import Swal from 'sweetalert2';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const API_BASE_URL = 'https://api.miniheealthstation.com';
 const API_KEY = 'ThapPhrik_Secret_Key_9988';
@@ -1240,6 +1240,29 @@ const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำ�
                         </div>
                     </div>
 
+                    {/* 📊 กราฟแท่งแสดงช่วงอายุ (God-Tier Fix: ไม่ใช้ IIFE, ใช้ Inline Map ล้างขีดแดง 100%) */}
+                    <div style={{ background: 'white', padding: '25px', borderRadius: '15px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginBottom: '25px' }}>
+                        <h3 style={{ margin: '0 0 20px 0', color: '#1e293b', fontSize: '18px', textAlign: 'center' }}>กราฟแสดงสัดส่วนช่วงอายุผู้ใช้บริการ</h3>
+                        <div style={{ width: '100%', display: 'flex', justifyContent: 'center', overflowX: 'auto' }}>
+                            <BarChart width={550} height={280} data={[
+                                { name: '0-15 ปี', value: analyticsData?.ageGroups?.gen1 || 0 },
+                                { name: '16-35 ปี', value: analyticsData?.ageGroups?.gen2 || 0 },
+                                { name: '36-60 ปี', value: analyticsData?.ageGroups?.gen3 || 0 },
+                                { name: '60 ปีขึ้นไป', value: analyticsData?.ageGroups?.gen4 || 0 }
+                            ]} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <XAxis dataKey="name" tick={{fill: '#64748b', fontWeight: 'bold'}} axisLine={{stroke: '#cbd5e1'}} tickLine={false} />
+                                <YAxis allowDecimals={false} tick={{fill: '#64748b'}} axisLine={false} tickLine={false} />
+                                <Tooltip cursor={{fill: '#f8fafc'}} formatter={(val: any) => [`${val} คน`, 'จำนวน']} contentStyle={{borderRadius: '10px', border: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.1)'}} />
+                                <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={55}>
+                                    {[ '#fde047', '#93c5fd', '#f9a8d4', '#fdba74' ].map((color, index) => (
+                                        <Cell key={`cell-${index}`} fill={color} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </div>
+                    </div>
+
                     {/* แถวที่ 3: กราฟความพึงพอใจ และ บทสรุป */}
                     <div style={{ display: 'flex', gap: '20px', background: 'white', padding: '20px', borderRadius: '15px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
                         
@@ -1277,10 +1300,25 @@ const [analyticsData, setAnalyticsData] = useState<any>(null); // State สำ�
                                 <p style={{ fontSize: '15px', color: '#334155', lineHeight: '1.8', margin: 0, textIndent: '25px', textAlign: 'justify' }}>
                                     {analyticsData?.summary || 'ยังไม่มีข้อมูลเพียงพอสำหรับสรุปผล'}
                                 </p>
+
+                                {/* 🧠 ระบบคำนวณ % ช่วงอายุแบบอัตโนมัติ (ป้องกันบั๊ก NaN% ในกรณีคนใช้งานเป็น 0) */}
+                                {analyticsData?.usage?.total > 0 && (
+                                    <p style={{ fontSize: '15px', color: '#475569', lineHeight: '1.8', margin: '15px 0 0 0', textAlign: 'justify' }}>
+                                        <strong>📊 เจาะลึกสัดส่วนช่วงอายุผู้ใช้งาน:</strong><br/>
+                                        พบกลุ่มผู้ใช้ช่วงวัย 0-15 ปี คิดเป็น <strong>{((analyticsData.ageGroups.gen1 / analyticsData.usage.total) * 100).toFixed(1)}%</strong>, 
+                                        วัย 16-35 ปี <strong>{((analyticsData.ageGroups.gen2 / analyticsData.usage.total) * 100).toFixed(1)}%</strong>, 
+                                        วัย 36-60 ปี <strong>{((analyticsData.ageGroups.gen3 / analyticsData.usage.total) * 100).toFixed(1)}%</strong>, 
+                                        และกลุ่มผู้สูงอายุ 60 ปีขึ้นไป <strong>{((analyticsData.ageGroups.gen4 / analyticsData.usage.total) * 100).toFixed(1)}%</strong> ของจำนวนผู้ใช้งานทั้งหมด
+                                    </p>
+                                )}
                             </div>
                             <button onClick={() => {
-                                navigator.clipboard.writeText(analyticsData?.summary || '');
-                                alert('คัดลอกข้อความสรุปผลวิจัยเรียบร้อยแล้ว!');
+                                const total = analyticsData?.usage?.total || 0;
+                                const ageSummary = total > 0 
+                                    ? ` เจาะลึกสัดส่วนช่วงอายุผู้ใช้งาน: 0-15 ปี (${((analyticsData.ageGroups.gen1 / total) * 100).toFixed(1)}%), 16-35 ปี (${((analyticsData.ageGroups.gen2 / total) * 100).toFixed(1)}%), 36-60 ปี (${((analyticsData.ageGroups.gen3 / total) * 100).toFixed(1)}%), และผู้สูงอายุ 60 ปีขึ้นไป (${((analyticsData.ageGroups.gen4 / total) * 100).toFixed(1)}%) ของผู้ใช้งานทั้งหมด` 
+                                    : '';
+                                navigator.clipboard.writeText((analyticsData?.summary || '') + ageSummary);
+                                alert('คัดลอกข้อความสรุปผลวิจัย พร้อมรายละเอียดเปอร์เซ็นต์ช่วงอายุ เรียบร้อยแล้ว!');
                             }} style={{ marginTop: '15px', padding: '12px', background: '#e0e7ff', color: '#4338ca', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
                                 <i className="fa-regular fa-copy"></i> คัดลอกข้อความไปใส่ Word
                             </button>

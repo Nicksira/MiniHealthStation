@@ -407,17 +407,25 @@ app.get('/jhcis-api/analytics', checkApiKey, async (req, res) => {
     try {
         connection = await mysql.createConnection(dbConfig);
         
-        // 1. [God-Tier Query] ใช้ Subquery และ LIKE เพื่อทะลุข้อจำกัดเรื่อง Collation Mismatch ของตาราง JHCIS
+        // 1. [God-Tier Query] ทะลวงกำแพง Collation (tis620 vs utf8) และกำจัดวันเกิดขยะ (0000-00-00) ของ JHCIS
         const sql = `
             SELECT 
                 COUNT(l.id) as total_usage,
                 CAST(SUM(CASE WHEN l.sex = '1' THEN 1 ELSE 0 END) AS SIGNED) as male_count,
                 CAST(SUM(CASE WHEN l.sex = '2' THEN 1 ELSE 0 END) AS SIGNED) as female_count,
-                CAST(SUM(CASE WHEN TIMESTAMPDIFF(YEAR, (SELECT MAX(birth) FROM person p WHERE REPLACE(p.idcard, '-', '') LIKE CONCAT('%', l.cid, '%')), CURDATE()) BETWEEN 0 AND 15 THEN 1 ELSE 0 END) AS SIGNED) as age_0_15,
-                CAST(SUM(CASE WHEN TIMESTAMPDIFF(YEAR, (SELECT MAX(birth) FROM person p WHERE REPLACE(p.idcard, '-', '') LIKE CONCAT('%', l.cid, '%')), CURDATE()) BETWEEN 16 AND 35 THEN 1 ELSE 0 END) AS SIGNED) as age_16_35,
-                CAST(SUM(CASE WHEN TIMESTAMPDIFF(YEAR, (SELECT MAX(birth) FROM person p WHERE REPLACE(p.idcard, '-', '') LIKE CONCAT('%', l.cid, '%')), CURDATE()) BETWEEN 36 AND 60 THEN 1 ELSE 0 END) AS SIGNED) as age_36_60,
-                CAST(SUM(CASE WHEN TIMESTAMPDIFF(YEAR, (SELECT MAX(birth) FROM person p WHERE REPLACE(p.idcard, '-', '') LIKE CONCAT('%', l.cid, '%')), CURDATE()) > 60 THEN 1 ELSE 0 END) AS SIGNED) as age_60_plus
+                CAST(SUM(CASE WHEN p.age BETWEEN 0 AND 15 THEN 1 ELSE 0 END) AS SIGNED) as age_0_15,
+                CAST(SUM(CASE WHEN p.age BETWEEN 16 AND 35 THEN 1 ELSE 0 END) AS SIGNED) as age_16_35,
+                CAST(SUM(CASE WHEN p.age BETWEEN 36 AND 60 THEN 1 ELSE 0 END) AS SIGNED) as age_36_60,
+                CAST(SUM(CASE WHEN p.age > 60 THEN 1 ELSE 0 END) AS SIGNED) as age_60_plus
             FROM kiosk_usage_log l
+            LEFT JOIN (
+                SELECT 
+                    CONVERT(REPLACE(TRIM(idcard), '-', '') USING utf8) as clean_cid, 
+                    TIMESTAMPDIFF(YEAR, MAX(birth), CURDATE()) as age
+                FROM person 
+                WHERE idcard IS NOT NULL AND idcard != '' AND birth > '1900-01-01'
+                GROUP BY CONVERT(REPLACE(TRIM(idcard), '-', '') USING utf8)
+            ) p ON CONVERT(REPLACE(TRIM(l.cid), '-', '') USING utf8) = p.clean_cid
         `;
         
         const [usageRows] = await connection.execute(sql);
