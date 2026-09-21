@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = 9999;
 
 const API_KEY = 'ThapPhrik_Secret_Key_9988';
 
@@ -111,6 +111,23 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
             } catch (labError) {
                 console.warn('ระบบ: ข้ามการบันทึกตาราง visitlabchcyesur เนื่องจากโครงสร้างตารางไม่สอดคล้องกัน');
             }
+        }
+
+        // 🦸‍♂️ [God-Tier Fix] แอบบันทึกผลงานลง Log เพื่อทำสถิติ อสม.
+        try {
+            const insertLogSql = `
+                INSERT INTO kiosk_usage_log 
+                (cid, vhv_cid, weight, height, sys_dia, pulse, temp, waist, sugar, search_date, sex) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
+            `;
+            const logValues = [
+                data.cid, 
+                data.vhv_cid || null, // 👈 นี่คือพระเอกของเราที่จะเชื่อมโยงผลงานเข้ากับชื่อ อสม.
+                weight, height, pressure, pulse, temp, waist, sugar, p.sex || null
+            ];
+            await connection.execute(insertLogSql, logValues);
+        } catch (logErr) {
+            console.warn('⚠️ Warning: บันทึก Log ผลงาน อสม. ไม่สำเร็จ (ตารางอาจยังไม่มีคอลัมน์ vhv_cid):', logErr.message);
         }
 
         res.status(200).json({ success: true, message: 'บันทึกข้อมูลเข้าระบบสำเร็จ' });
@@ -491,6 +508,103 @@ app.get('/jhcis-api/analytics', checkApiKey, async (req, res) => {
 
     } catch (error) {
         console.error('Analytics Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// ==========================================
+// 🦸‍♂️ API: สำหรับ อสม. Login (God-Tier Deep Search)
+// ==========================================
+app.post('/jhcis-api/vhv-login', checkApiKey, async (req, res) => {
+    const { cid } = req.body;
+    console.log(`\n========================================`);
+    console.log(`[VHV Login] 🔍 หน้าเว็บร้องขอค้นหา อสม. รหัส: '${cid}'`);
+    
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        // 🛡️ ใช้ LIKE ค้นหาแบบกวาดทุกตัวอักษร ตัดปัญหาช่องว่าง/อักขระซ่อนตัวจาก Excel แบบ 1000%
+        const sql = `SELECT name, cid FROM kiosk_vhv WHERE cid LIKE CONCAT('%', ?, '%') LIMIT 1`;
+        const [rows] = await connection.execute(sql, [cid]);
+        
+        if (rows.length > 0) {
+            console.log(`[VHV Login] ✅ พบข้อมูล: ${rows[0].name} (CID ในฐาน: '${rows[0].cid}')`);
+            res.status(200).json({ success: true, data: rows[0] });
+        } else {
+            console.log(`[VHV Login] ❌ ไม่พบข้อมูล (ไม่มีเลขนี้ในตาราง)`);
+            res.status(404).json({ success: false, message: 'ไม่พบข้อมูล อสม. ในระบบ' });
+        }
+    } catch (error) {
+        console.error(`[VHV Login] 🚨 Database Error: ${error.message}`);
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+    console.log(`========================================\n`);
+});
+
+// // ==========================================
+// 📊 API: สถิติผลงาน อสม. (สำหรับ Admin) - [Optimized Projection]
+// ==========================================
+app.get('/jhcis-api/vhv-stats', checkApiKey, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        // 🛡️ Architect Note: การทำ Alias (AS vhv_cid) ต้องตรงกับที่ Frontend ร้องขอเสมอ
+        const sql = `
+            SELECT 
+                v.cid AS vhv_cid,  /* 👈 จุดตายอยู่ตรงนี้ครับ! ต้องบังคับส่ง cid ออกมาด้วย */
+                v.name AS vhv_name,
+                COUNT(l.id) AS total_patients,
+                SUM(CASE WHEN l.weight > 0 THEN 1 ELSE 0 END) AS weight_recorded,
+                SUM(CASE WHEN l.height > 0 THEN 1 ELSE 0 END) AS height_recorded,
+                SUM(CASE WHEN l.sys_dia != '' AND l.sys_dia IS NOT NULL AND l.sys_dia != '---' THEN 1 ELSE 0 END) AS bp_recorded,
+                SUM(CASE WHEN l.pulse > 0 THEN 1 ELSE 0 END) AS pulse_recorded,
+                SUM(CASE WHEN l.temp > 0 THEN 1 ELSE 0 END) AS temp_recorded,
+                SUM(CASE WHEN l.waist > 0 THEN 1 ELSE 0 END) AS waist_recorded,
+                SUM(CASE WHEN l.sugar > 0 THEN 1 ELSE 0 END) AS sugar_recorded
+            FROM kiosk_vhv v
+            LEFT JOIN kiosk_usage_log l ON v.cid = l.vhv_cid
+            GROUP BY v.cid, v.name
+            ORDER BY total_patients DESC
+        `;
+        const [rows] = await connection.execute(sql);
+        res.status(200).json({ success: true, data: rows });
+    } catch (error) {
+        console.error("[Stats API] 🚨 Error:", error.message);
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// ==========================================
+// 🚀 API V2: เจาะลึกข้อมูลรายบุคคลของ อสม. (God-Tier Versioning)
+// ==========================================
+app.get('/jhcis-api/vhv-logs-v2/:vhv_cid', checkApiKey, async (req, res) => {
+    const vhvCid = req.params.vhv_cid;
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const sql = `
+            SELECT 
+                l.cid as patient_cid,
+                COALESCE(CONCAT(p.fname, ' ', p.lname), 'ไม่ทราบชื่อในระบบ') as patient_name,
+                l.weight, l.height, l.sys_dia, l.pulse, 
+                ROUND(l.temp, 1) as temp, 
+                l.waist, l.sugar,
+                DATE_FORMAT(l.search_date, '%d/%m/%Y %H:%i') as record_time
+            FROM kiosk_usage_log l
+            LEFT JOIN person p ON CONVERT(REPLACE(TRIM(p.idcard), '-', '') USING utf8) = CONVERT(REPLACE(TRIM(l.cid), '-', '') USING utf8)
+            WHERE l.vhv_cid = ?
+            ORDER BY l.search_date DESC
+        `;
+        const [rows] = await connection.execute(sql, [vhvCid]);
+        res.status(200).json({ success: true, data: rows });
+    } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     } finally {
         if (connection) await connection.end();
