@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 9999;
+const PORT = 3333;
 
 const API_KEY = 'ThapPhrik_Secret_Key_9988';
 
