@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3333;
+const PORT = 3000;
 
 const API_KEY = 'ThapPhrik_Secret_Key_9988';
 
@@ -291,7 +291,8 @@ app.post('/jhcis-api/upload-photo', checkApiKey, async (req, res) => {
 // ==========================================
 // 🎯 API 5: ระบบ AI พยาบาลอัจฉริยะ (Smart Triage + JSON Output)
 // ==========================================
-const GOOGLE_API_KEY = process.env.GCP_API_KEY;
+// 🎯 แก้ชื่อตัวแปรให้ตรงกับที่ระบบเรียกใช้
+const GEMINI_API_KEY = process.env.GCP_API_KEY || '';
 
 app.post('/jhcis-api/ai-analyze', checkApiKey, async (req, res) => {
     const { vitals } = req.body;
@@ -582,13 +583,15 @@ app.get('/jhcis-api/vhv-stats', checkApiKey, async (req, res) => {
 });
 
 // ==========================================
-// 🚀 API V2: เจาะลึกข้อมูลรายบุคคลของ อสม. (God-Tier Versioning)
+// 🚀 API: เจาะลึกข้อมูลรายบุคคลของ อสม. (พระเอกของเรา)
 // ==========================================
-app.get('/jhcis-api/vhv-logs-v2/:vhv_cid', checkApiKey, async (req, res) => {
+// 🔴 จุดสำคัญ: ต้องแน่ใจว่าตรงนี้เขียนว่า /jhcis-api/vhv-logs/:vhv_cid (ไม่มี -v2)
+app.get('/jhcis-api/vhv-logs/:vhv_cid', checkApiKey, async (req, res) => {
     const vhvCid = req.params.vhv_cid;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
+        
         const sql = `
             SELECT 
                 l.cid as patient_cid,
@@ -605,6 +608,7 @@ app.get('/jhcis-api/vhv-logs-v2/:vhv_cid', checkApiKey, async (req, res) => {
         const [rows] = await connection.execute(sql, [vhvCid]);
         res.status(200).json({ success: true, data: rows });
     } catch (error) {
+        console.error("🔥 [Drill-down Error]:", error.message);
         res.status(500).json({ success: false, message: error.message });
     } finally {
         if (connection) await connection.end();

@@ -1120,6 +1120,7 @@ function App() {
         </div>
       </header>
 
+      {/* 🔴 โค้ดเดิม: ปุ่มกลับหน้าแรกของคนไข้ */}
       {isLoggedIn && !showSettings && (
         <button 
           onClick={handleLogout}
@@ -1133,6 +1134,23 @@ function App() {
           onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.backgroundColor = 'white'; }}
         >
           <i className="fa-solid fa-chevron-left" style={{ fontSize: '16px' }}></i> กลับหน้าแรก
+        </button>
+      )}
+
+      {/* 🟢 โค้ดใหม่ที่ต้องเพิ่ม: ปุ่มกลับหน้าแรก สำหรับหน้า Admin (ผู้ดูแลระบบ) */}
+      {showSettings && (
+        <button 
+          onClick={() => setShowSettings(false)}
+          style={{
+            position: 'absolute', top: '25px', left: '25px', zIndex: 9999, padding: '12px 24px',
+            backgroundColor: 'white', color: '#dc2626', border: 'none', borderRadius: '50px',
+            fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', display: 'flex',
+            alignItems: 'center', gap: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', transition: 'all 0.2s ease-in-out'
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.backgroundColor = '#fef2f2'; }}
+          onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.backgroundColor = 'white'; }}
+        >
+          <i className="fa-solid fa-right-from-bracket" style={{ fontSize: '16px' }}></i> กลับหน้าแรก
         </button>
       )}
 
