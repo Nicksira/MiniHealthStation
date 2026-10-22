@@ -48,6 +48,9 @@ function App() {
   const [vhvLoginError, setVhvLoginError] = useState('');
   const [vhvStatsData, setVhvStatsData] = useState<any[]>([]);
 
+  // 🩺 State สำหรับเลือกประเภทบริการ: 'health_station' (ค่าเริ่มต้น) หรือ 'screening' (คัดกรอง)
+  const [serviceType, setServiceType] = useState<'health_station' | 'screening'>('health_station');
+
   // 🦸‍♂️ State สำหรับดูรายละเอียดผลงาน อสม.
   const [showVhvDetailsModal, setShowVhvDetailsModal] = useState(false);
   const [selectedVhvName, setSelectedVhvName] = useState('');
@@ -881,6 +884,7 @@ function App() {
     const payload = {
       cid: patient.cid,
       vhv_cid: currentVhv ? currentVhv.cid : null,
+      serviceType: serviceType, // 👈 ส่งประเภทบริการ ('health_station' หรือ 'screening') ไปให้ Backend
       weight: vitals.weight === '' || vitals.weight === '---' ? 0 : parseFloat(vitals.weight),
       height: vitals.height === '' || vitals.height === '---' ? 0 : parseFloat(vitals.height),
       sysDia: vitals.sysDia === '---' ? '' : vitals.sysDia, 
@@ -1611,6 +1615,90 @@ function App() {
                 </a>
               )}
               
+              {/* 🩺 โซนปุ่มเลือกประเภทการรับบริการ (HealthStation vs คัดกรอง) ก่อนกดบันทึก */}
+              <div style={{ background: '#f8fafc', padding: '18px', borderRadius: '12px', border: '2px solid #e2e8f0', marginBottom: '5px' }}>
+                <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-clipboard-check" style={{ color: '#3b82f6', fontSize: '20px' }}></i> 
+                  กรุณาเลือกประเภทการรับบริการก่อนบันทึก:
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  {/* ปุ่มที่ 1: HealthStation */}
+                  <button
+                    type="button"
+                    onClick={() => setServiceType('health_station')}
+                    style={{
+                      padding: '16px',
+                      borderRadius: '12px',
+                      border: serviceType === 'health_station' ? '3px solid #0284c7' : '2px solid #cbd5e1',
+                      backgroundColor: serviceType === 'health_station' ? '#e0f2fe' : 'white',
+                      color: serviceType === 'health_station' ? '#0369a1' : '#64748b',
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s',
+                      boxShadow: serviceType === 'health_station' ? '0 4px 12px rgba(2, 132, 199, 0.25)' : 'none'
+                    }}
+                  >
+                    <i className="fa-solid fa-house-chimney-medical" style={{ fontSize: '28px' }}></i>
+                    <span>HealthStation</span>
+                    <small style={{ fontSize: '13px', fontWeight: 'normal', opacity: 0.9 }}>
+                      ผู้ป่วย NCD กลุ่มสีเขียว
+                    </small>
+                  </button>
+
+                  {/* ปุ่มที่ 2: คัดกรอง */}
+                  <button
+                    type="button"
+                    onClick={() => setServiceType('screening')}
+                    style={{
+                      padding: '16px',
+                      borderRadius: '12px',
+                      border: serviceType === 'screening' ? '3px solid #8b5cf6' : '2px solid #cbd5e1',
+                      backgroundColor: serviceType === 'screening' ? '#f3e8ff' : 'white',
+                      color: serviceType === 'screening' ? '#6d28d9' : '#64748b',
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s',
+                      boxShadow: serviceType === 'screening' ? '0 4px 12px rgba(139, 92, 246, 0.25)' : 'none'
+                    }}
+                  >
+                    <i className="fa-solid fa-magnifying-glass-chart" style={{ fontSize: '28px' }}></i>
+                    <span>คัดกรอง</span>
+                    <small style={{ fontSize: '13px', fontWeight: 'normal', opacity: 0.9 }}>
+                      เบาหวาน-ความดัน 35 ปีขึ้นไป
+                    </small>
+                  </button>
+                </div>
+
+                {/* แถบแสดงตัวอย่างข้อความที่จะถูกบันทึกลง JHCIS */}
+                <div style={{ 
+                  marginTop: '12px', 
+                  padding: '10px 14px', 
+                  background: 'white', 
+                  borderRadius: '8px', 
+                  borderLeft: `4px solid ${serviceType === 'health_station' ? '#0284c7' : '#8b5cf6'}`, 
+                  fontSize: '14px', 
+                  color: '#334155' 
+                }}>
+                  <strong>ข้อความที่จะบันทึกเข้า JHCIS:</strong>{' '}
+                  {serviceType === 'screening' 
+                    ? 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป' 
+                    : 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.'}
+                </div>
+              </div>
+
               <button 
                 onClick={sendToJHCISQueue}
                 style={{ width: '100%', padding: '18px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontSize: '20px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'transform 0.2s', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.3)' }}

@@ -81,9 +81,15 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
         const waist = parseFloat(data.waist) || 0;
         const sugar = parseFloat(data.sugar) || 0;
 
-        // กำหนดข้อมูลผลตรวจและข้อความวินิจฉัยอัตโนมัติ
+        // กำหนดข้อมูลผลตรวจและข้อความวินิจฉัยอัตโนมัติ (แยกตามปุ่มที่เลือกจากหน้า Kiosk)
         const vitalCheckText = sugar > 0 ? `DTX: ${sugar} mg/dL` : '';
-        const autoSymptoms = 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.';
+        
+        // 🛡️ Enterprise Logic: ตรวจสอบค่า serviceType ที่ส่งมาจาก Frontend
+        // ถ้าเลือก 'screening' ให้ใช้ข้อความคัดกรอง, ถ้าเป็นค่าอื่นหรือค่าว่างให้ใช้ HealthStation เป็นค่าเริ่มต้น (Safe Fallback)
+        const autoSymptoms = data.serviceType === 'screening'
+            ? 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป'
+            : 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.';
+            
         const autoSymptomsco = 'ไม่มีเดินเซ ปากเบี้ยว พูดคุยรู้เรื่องชัดเจน ';
 
         // บันทึกข้อมูลลงตาราง visit รวมถึง symptoms และ symptomsco
