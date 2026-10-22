@@ -1512,6 +1512,26 @@ function App() {
           </div>
 
 
+          
+
+          <div className="device-buttons">
+            <button className="btn-device" onClick={() => openGuideModal('o2')} style={{ border: '2px solid #3b82f6' }}>
+              อ๊อกซิเจนในเลือด <i className="fa-regular fa-hand-point-up" style={{ color: 'rgb(255, 212, 59)', marginLeft: '8px' }}></i>
+            </button>
+            <button className="btn-device" onClick={() => openGuideModal('weight')} style={{ border: '2px solid #3b82f6' }}>
+              ชั่งน้ำหนัก <i className="fa-solid fa-weight-scale" style={{ color: 'rgb(99, 230, 190)', marginLeft: '8px' }}></i>
+            </button>
+            <button className="btn-device" onClick={() => openGuideModal('temp')} style={{ border: '2px solid #3b82f6' }}>
+              วัดอุณหภูมิ <i className="fa-solid fa-temperature-low" style={{ color: 'rgb(248, 126, 0)',marginLeft: '8px' }}></i>
+            </button>
+            <button className="btn-device" onClick={() => openGuideModal('bp')} style={{ border: '2px solid #3b82f6' }}>
+              วัดความดันฯ <i className="fa-solid fa-gauge-high" style={{ color: 'rgb(116, 192, 252)', marginLeft: '8px' }}></i>
+            </button>
+            <button className="btn-device" onClick={() => openGuideModal('sugar')} style={{ border: '2px solid #3b82f6' }}>
+              น้ำตาลในเลือด <i className="fa-solid fa-droplet" style={{ color: 'rgb(244, 30, 30)', marginLeft: '8px' }}></i>
+            </button>
+          </div>
+
           {/* 🩺 โซนปุ่มเลือกประเภทการรับบริการ (ย้ายมาไว้ใต้รูปผู้ป่วย + เอาแถบสีด้านซ้ายออก) */}
           <div style={{ 
             background: '#f8fafc', 
@@ -1604,24 +1624,6 @@ function App() {
                 ? 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป' 
                 : 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.'}
             </div>
-          </div>
-
-          <div className="device-buttons">
-            <button className="btn-device" onClick={() => openGuideModal('o2')} style={{ border: '2px solid #3b82f6' }}>
-              อ๊อกซิเจนในเลือด <i className="fa-regular fa-hand-point-up" style={{ color: 'rgb(255, 212, 59)', marginLeft: '8px' }}></i>
-            </button>
-            <button className="btn-device" onClick={() => openGuideModal('weight')} style={{ border: '2px solid #3b82f6' }}>
-              ชั่งน้ำหนัก <i className="fa-solid fa-weight-scale" style={{ color: 'rgb(99, 230, 190)', marginLeft: '8px' }}></i>
-            </button>
-            <button className="btn-device" onClick={() => openGuideModal('temp')} style={{ border: '2px solid #3b82f6' }}>
-              วัดอุณหภูมิ <i className="fa-solid fa-temperature-low" style={{ color: 'rgb(248, 126, 0)',marginLeft: '8px' }}></i>
-            </button>
-            <button className="btn-device" onClick={() => openGuideModal('bp')} style={{ border: '2px solid #3b82f6' }}>
-              วัดความดันฯ <i className="fa-solid fa-gauge-high" style={{ color: 'rgb(116, 192, 252)', marginLeft: '8px' }}></i>
-            </button>
-            <button className="btn-device" onClick={() => openGuideModal('sugar')} style={{ border: '2px solid #3b82f6' }}>
-              น้ำตาลในเลือด <i className="fa-solid fa-droplet" style={{ color: 'rgb(244, 30, 30)', marginLeft: '8px' }}></i>
-            </button>
           </div>
 
           <div className="vitals-container">
