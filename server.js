@@ -43,12 +43,11 @@ const checkApiKey = (req, res, next) => {
 };
 
 // ==========================================
-// API 1: บันทึกเข้าคิว JHCIS (ปรับปรุงโครงสร้างข้อมูลอาการสำคัญและอาการร่วม)
+// API 1: บันทึกเข้าคิว JHCIS (อัปเกรด โภชนาการเด็ก + อาการสำคัญ)
 // ==========================================
 app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
     const data = req.body || {}; 
     
-    // ตรวจสอบความถูกต้องของรูปแบบข้อมูล (Data Validation)
     if (!data.cid || String(data.cid).length !== 13) {
         return res.status(400).json({ success: false, message: 'รูปแบบเลขประจำตัวประชาชนไม่ถูกต้อง' });
     }
@@ -57,22 +56,17 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
     try {
         connection = await mysql.createConnection(dbConfig);
         
-        // ค้นหาข้อมูลผู้รับบริการ
         const [personRows] = await connection.execute(
-            'SELECT pid, pcucodeperson, rightcode, rightno FROM person WHERE idcard = ? LIMIT 1', 
+            'SELECT pid, pcucodeperson, rightcode, rightno, sex FROM person WHERE idcard = ? LIMIT 1', 
             [data.cid]
         );
         
-        if (personRows.length === 0) {
-            return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลผู้รับบริการในระบบ' });
-        }
+        if (personRows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล' });
         const p = personRows[0];
         
-        // กำหนดลำดับการรับบริการ (Visit Number)
         const [maxRows] = await connection.execute('SELECT MAX(visitno) as mx FROM visit');
         const vno = (maxRows[0].mx || 0) + 1;
 
-        // แปลงชนิดข้อมูลและจัดการค่าว่าง (Data Sanitization)
         const weight = parseFloat(data.weight) || 0;
         const height = parseFloat(data.height) || 0;
         const pressure = (data.sysDia && data.sysDia !== '---') ? data.sysDia : '';
@@ -80,25 +74,26 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
         const temp = parseFloat(data.temp) || 0;
         const waist = parseFloat(data.waist) || 0;
         const sugar = parseFloat(data.sugar) || 0;
-
-        // กำหนดข้อมูลผลตรวจและข้อความวินิจฉัยอัตโนมัติ (แยกตามปุ่มที่เลือกจากหน้า Kiosk)
         const vitalCheckText = sugar > 0 ? `DTX: ${sugar} mg/dL` : '';
         
-        // 🛡️ Enterprise Logic: ตรวจสอบค่า serviceType ที่ส่งมาจาก Frontend
-        // ถ้าเลือก 'screening' ให้ใช้ข้อความคัดกรอง, ถ้าเป็นค่าอื่นหรือค่าว่างให้ใช้ HealthStation เป็นค่าเริ่มต้น (Safe Fallback)
-        const autoSymptoms = data.serviceType === 'screening'
-            ? 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป'
-            : 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.';
-            
-        const autoSymptomsco = 'ไม่มีเดินเซ ปากเบี้ยว พูดคุยรู้เรื่องชัดเจน ';
+        let autoSymptoms = '';
+        let autoSymptomsco = '';
 
-        // บันทึกข้อมูลลงตาราง visit รวมถึง symptoms และ symptomsco
+        if (data.ageMonths !== undefined && data.ageMonths <= 60) {
+            autoSymptoms = 'ตรวจภาวะโภชนาการเด็ก 0-60 เดือน';
+            autoSymptomsco = `ตรวจกระตุ้นพัฒนาการ อายุ ${data.ageMonths} เดือน สมวัย`;
+        } else {
+            autoSymptoms = data.serviceType === 'screening'
+                ? 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป'
+                : 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.';
+            autoSymptomsco = 'ไม่มีเดินเซ ปากเบี้ยว พูดคุยรู้เรื่องชัดเจน ';
+        }
+
         const sqlVisit = `
             INSERT INTO visit 
             (pcucode, visitno, visitdate, pcucodeperson, pid, weight, height, pressure, pulse, temperature, waist, rightcode, rightno, timeservice, vitalcheck, symptoms, symptomsco) 
             VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '1', ?, ?, ?)
         `;
-        
         await connection.execute(sqlVisit, [
             p.pcucodeperson, vno, p.pcucodeperson, p.pid, 
             weight, height, pressure, pulse, temp, waist, 
@@ -106,48 +101,114 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
             autoSymptoms, autoSymptomsco
         ]);
 
-        // บันทึกผลระดับน้ำตาลในเลือดสำรอง
         if (sugar > 0) {
             try {
-                const sqlLab = `
-                    INSERT INTO visitlabchcyesur (pcucode, visitno, dtc, dateupdate)
-                    VALUES (?, ?, ?, NOW())
-                `;
-                await connection.execute(sqlLab, [p.pcucodeperson, vno, sugar]);
-            } catch (labError) {
-                console.warn('ระบบ: ข้ามการบันทึกตาราง visitlabchcyesur เนื่องจากโครงสร้างตารางไม่สอดคล้องกัน');
+                await connection.execute('INSERT INTO visitlabchcyesur (pcucode, visitno, dtc, dateupdate) VALUES (?, ?, ?, NOW())', [p.pcucodeperson, vno, sugar]);
+            } catch (labError) {}
+        }
+
+        // 3. โซนเด็ก (0-60 เดือน): บันทึกเข้าหน้า "โภชนาการ"
+        if (data.ageMonths !== undefined && data.ageMonths <= 60) {
+            try {
+                const headCircum = parseFloat(data.headCircum) || 0;
+                
+                // 🚨 จำลองลอจิก JHCIS: ถ้าส่งรหัส 99 (แปลผลไม่ได้) มา ให้เซฟลงฐานข้อมูลเป็น 3, Null, Null
+                const nlevel = data.nlevel === '99' ? '3' : (data.nlevel || '3'); 
+                const nlevel2 = data.nlevel === '99' ? null : (data.nlevel2 || '3'); 
+                const nlevel3 = data.nlevel === '99' ? null : (data.nlevel3 || '4'); 
+                const growdevelop = data.growdevelop || '1'; 
+
+                await connection.execute(`
+                    INSERT INTO visitnutrition 
+                    (pcucode, visitno, weight, tall, headcycle, nlevel, nlevel2, nlevel3, growdevelop, dateupdate) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                    ON DUPLICATE KEY UPDATE 
+                    weight = VALUES(weight), tall = VALUES(tall), headcycle = VALUES(headcycle), 
+                    nlevel = VALUES(nlevel), nlevel2 = VALUES(nlevel2), nlevel3 = VALUES(nlevel3), 
+                    growdevelop = VALUES(growdevelop), dateupdate = NOW()
+                `, [p.pcucodeperson, vno, weight, height, headCircum, nlevel, nlevel2, nlevel3, growdevelop]);
+            } catch (nutriErr) {
+                console.error("🔥 Warning: visitnutrition Error:", nutriErr.message);
             }
         }
 
-        // 🦸‍♂️ [God-Tier Fix] แอบบันทึกผลงานลง Log เพื่อทำสถิติ อสม.
-        try {
-            const insertLogSql = `
-                INSERT INTO kiosk_usage_log 
-                (cid, vhv_cid, weight, height, sys_dia, pulse, temp, waist, sugar, search_date, sex) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
-            `;
-            const logValues = [
-                data.cid, 
-                data.vhv_cid || null, // 👈 นี่คือพระเอกของเราที่จะเชื่อมโยงผลงานเข้ากับชื่อ อสม.
-                weight, height, pressure, pulse, temp, waist, sugar, p.sex || null
-            ];
-            await connection.execute(insertLogSql, logValues);
-        } catch (logErr) {
-            console.warn('⚠️ Warning: บันทึก Log ผลงาน อสม. ไม่สำเร็จ (ตารางอาจยังไม่มีคอลัมน์ vhv_cid):', logErr.message);
+        // ========================================================
+        // 🎗️ โซนบันทึก SpecialPP (บุหรี่, สุรา)
+        // ========================================================
+        if (data.smokeStatus || data.alcoholStatus) {
+            try {
+                const ppCodes = [];
+                if (data.smokeStatus === 'ไม่สูบ') ppCodes.push('1B52');
+                else if (data.smokeStatus === 'เคยสูบแต่เลิกแล้ว') ppCodes.push('1B51');
+                else if (data.smokeStatus === 'ยังสูบอยู่') {
+                    ppCodes.push(data.smokeAmount || '1B509');
+                    if (data.smokeWake) ppCodes.push(data.smokeWake); 
+                    if (data.smokeAdvice) ppCodes.push(data.smokeAdvice);
+                }
+                
+                if (data.alcoholStatus === 'ไม่ดื่ม') ppCodes.push('1B600');
+                else if (data.alcoholStatus === 'เคยดื่มแต่เลิกแล้ว') ppCodes.push('1B601');
+                else if (data.alcoholStatus === 'ยังดื่มอยู่') {
+                    ppCodes.push('1B609');
+                    if (data.alcoholAdvice) ppCodes.push(data.alcoholAdvice);
+                }
+
+                for (const code of ppCodes) {
+                    if (!code) continue; 
+                    await connection.execute(`
+                        INSERT INTO f43specialpp (pcucodeperson, pid, dateserv, ppspecial, pcucode, visitno, servplace, ppsplace, dateupdate) 
+                        VALUES (?, ?, CURDATE(), ?, ?, ?, '1', ?, NOW())
+                        ON DUPLICATE KEY UPDATE visitno = VALUES(visitno), ppsplace = VALUES(ppsplace), dateupdate = NOW()
+                    `, [p.pcucodeperson, p.pid, code, p.pcucodeperson, vno, p.pcucodeperson]);
+                }
+            } catch (ppErr) {
+                console.error("🔥 Warning f43specialpp:", ppErr.message);
+            }
         }
 
-        res.status(200).json({ success: true, message: 'บันทึกข้อมูลเข้าระบบสำเร็จ' });
+        // ========================================================
+        // 🎗️ โซนคัดกรองมะเร็งเต้านม 1B0030 (ประมวลผลใน MySQL อัตโนมัติ ปลอดภัย 100%)
+        // ========================================================
+        try {
+            await connection.execute(`
+                INSERT INTO f43specialpp (pcucodeperson, pid, dateserv, ppspecial, pcucode, visitno, servplace, ppsplace, dateupdate) 
+                SELECT pcucodeperson, pid, CURDATE(), '1B0030', ?, ?, '1', ?, NOW() 
+                FROM person 
+                WHERE idcard = ? 
+                  AND sex = '2' 
+                  AND TIMESTAMPDIFF(YEAR, birth, CURDATE()) BETWEEN 30 AND 70
+                ON DUPLICATE KEY UPDATE 
+                    visitno = VALUES(visitno), 
+                    ppsplace = VALUES(ppsplace), 
+                    dateupdate = NOW()
+            `, [p.pcucodeperson, vno, p.pcucodeperson, data.cid]);
+        } catch (cancerErr) {
+            console.error("🔥 Warning 1B0030:", cancerErr.message);
+        }
+
+        // ========================================================
+        // บันทึก Log การใช้งาน Kiosk
+        // ========================================================
+        try {
+            await connection.execute(`INSERT INTO kiosk_usage_log (cid, vhv_cid, weight, height, sys_dia, pulse, temp, waist, sugar, search_date, sex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)`, [data.cid, data.vhv_cid || null, weight, height, pressure, pulse, temp, waist, sugar, p.sex || null]);
+        } catch (logErr) {}
+
+        res.status(200).json({ success: true, message: 'บันทึกข้อมูลสำเร็จ' });
 
     } catch (error) {
         console.error('Database Error:', error);
-        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดที่เซิร์ฟเวอร์: ' + error.message });
+        res.status(500).json({ success: false, message: 'Server Error: ' + error.message });
     } finally {
         if (connection) await connection.end(); 
     }
 });
+// ========================================== จบ API 1
+
+
+
 
 // ==========================================
-// 🎯 API 2: ดึงประวัติคนไข้ JHCIS (อัปเดต: บันทึกสถิติการใช้งานสำหรับงานวิจัย)
+// 🎯 API 2: ดึงประวัติคนไข้ JHCIS (เพิ่มคำนวณอายุเดือน)
 // ==========================================
 app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
     let connection;
@@ -155,13 +216,14 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         const sql = `
             SELECT 
-                p.fname, p.lname, p.sex,
+                p.fname, p.lname, p.sex, 
+                TIMESTAMPDIFF(MONTH, p.birth, CURDATE()) AS age_months,
                 GROUP_CONCAT(c.diseasenamethai SEPARATOR ', ') as chronic_name
             FROM person p
             LEFT JOIN personchronic pc ON p.pid = pc.pid AND p.pcucodeperson = pc.pcucodeperson
             LEFT JOIN cdisease c ON pc.chroniccode = c.diseasecode
             WHERE p.idcard = ?
-            GROUP BY p.pid, p.fname, p.lname, p.sex
+            GROUP BY p.pid, p.fname, p.lname, p.sex, p.birth
             LIMIT 1
         `;
         const [rows] = await connection.execute(sql, [req.params.cid]);
@@ -169,17 +231,16 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
         if (rows.length > 0) {
             const patient = rows[0];
             
-            // 📊 [Data Analytics] แอบบันทึกสถิติการเข้าใช้งานเบื้องหลังแบบ Asynchronous
             try {
                 const sqlLog = `INSERT INTO kiosk_usage_log (cid, sex, search_date) VALUES (?, ?, NOW())`;
-                // ไม่ต้องรอ await ก็ได้ เพื่อให้หน้าจอ Kiosk โหลดเร็วที่สุด (Fire and Forget)
                 connection.execute(sqlLog, [req.params.cid, patient.sex || null]).catch(()=> {});
-            } catch (logErr) { /* ปล่อยผ่านหากเก็บ log ไม่ได้ */ }
+            } catch (logErr) { }
 
             res.status(200).json({ 
                 success: true, 
                 data: { 
                     fname: patient.fname, lname: patient.lname, sex: patient.sex,
+                    age_months: patient.age_months, // 👈 ส่งอายุเป็นเดือนกลับไปให้หน้าเว็บ
                     chronic: patient.chronic_name ? patient.chronic_name : 'ไม่มีโรคประจำตัว' 
                 } 
             });

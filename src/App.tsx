@@ -51,6 +51,14 @@ function App() {
   // 🩺 State สำหรับเลือกประเภทบริการ: 'health_station' (ค่าเริ่มต้น) หรือ 'screening' (คัดกรอง)
   const [serviceType, setServiceType] = useState<'health_station' | 'screening'>('health_station');
 
+  const [smokeStatus, setSmokeStatus] = useState<string>('');
+  const [alcoholStatus, setAlcoholStatus] = useState<string>('');
+  const [alcoholAdvice, setAlcoholAdvice] = useState<string>(''); // 👈 เพิ่ม state เก็บคำแนะนำสุรา
+  // 🩺 State ย่อยสำหรับบุหรี่
+  const [smokeAmount, setSmokeAmount] = useState<string>('1B509'); // ค่าเริ่มต้นคือ 1B509 (สูบแต่ไม่ระบุมวน)
+  const [smokeWake, setSmokeWake] = useState<string>(''); // 👈 ตัวแปรใหม่สำหรับข้อ 2
+  const [smokeAdvice, setSmokeAdvice] = useState<string>('');
+
   // 🦸‍♂️ State สำหรับดูรายละเอียดผลงาน อสม.
   const [showVhvDetailsModal, setShowVhvDetailsModal] = useState(false);
   const [selectedVhvName, setSelectedVhvName] = useState('');
@@ -106,6 +114,14 @@ function App() {
           alert(`ไม่สามารถดึงข้อมูลได้ สาเหตุ: ${errorMsg}`);
       }
   };
+
+  // พจนานุกรมแปลรหัส JHCIS เป็นข้อความ
+const NUTRITION_DICT: any = {
+  nlevel: { '1': 'น้ำหนักมาก', '2': 'น้ำหนักค่อนข้างมาก', '3': 'นน.ตามเกณฑ์', '4': 'น้ำหนักค่อนข้างน้อย', '5': 'น้ำหนักน้อย', '99': 'นน.สูงเกิน กองโภช.แปลผลไม่ได้' },
+  nlevel2: { '1': 'สูง', '2': 'ค่อนข้างสูง', '3': 'สูงตามเกณฑ์', '4': 'ค่อนข้างเตี้ย', '5': 'เตี้ย', '99': 'สูงตามเกณฑ์' },
+  nlevel3: { '1': 'อ้วน', '2': 'เริ่มอ้วน', '3': 'ท้วม', '4': 'สมส่วน', '5': 'ค่อนข้างผอม', '6': 'ผอม', '99': 'สมส่วน' },
+  growdevelop: { '1': 'สมวัย / ปกติ', '2': 'สงสัยล่าช้า', '3': 'ล่าช้า' }
+};
 
   // 🟢 ฟังก์ชันเปิดหน้าต่าง Guide
   const openGuideModal = (type: string) => {
@@ -209,10 +225,65 @@ function App() {
   const [vitals, setVitals] = useState({
     height: '---', weight: '---', waist: '---',
     bmi: '---', temp: '---', spo2: '---',
-    sysDia: '---', pulse: '---', sugar: '---'
+    sysDia: '---', pulse: '---', sugar: '---',
+    headCircum: '---' // 👈 เพิ่มตัวแปรเส้นรอบศีรษะ
   });
 
-  // 🧠 ให้ AI ทำงานอัตโนมัติ
+  const [childDev, setChildDev] = useState({
+    nlevel: '3',       // 3 = นน.ตามเกณฑ์
+    nlevel2: '3',      // 3 = สูงตามเกณฑ์
+    nlevel3: '4',      // 4 = สมส่วน
+    growdevelop: '1'   // 1 = สมวัย
+  });
+
+  // 👇👇👇👇 [ก๊อปปี้ก้อนนี้มาวางแทรกตรงนี้ได้เลยครับ] 👇👇👇👇
+  // 🧠 สมองกลประเมินโภชนาการเด็ก (จำลองกราฟกรมอนามัย และดักบั๊กของ JHCIS)
+  useEffect(() => {
+    if (patient?.age_months !== undefined && patient?.age_months <= 60) {
+      const w = parseFloat(vitals.weight);
+      const h = parseFloat(vitals.height);
+      const age = patient.age_months;
+
+      if (w > 0 && h > 0) {
+        
+        // 🚨 ดักจับเคสหลุดกราฟ (เช่น เด็ก 3 ขวบ หนัก 50 กก.) ให้โชว์ข้อความเดียวกับ JHCIS
+        if (w >= 35 || h >= 130 || w <= 2 || h <= 40) {
+            setChildDev(prev => ({ ...prev, nlevel: '99', nlevel2: '99', nlevel3: '99' }));
+            return;
+        }
+
+        let n1 = '3', n2 = '3', n3 = '4';
+        
+        // 1. ประเมิน นน./ส่วนสูง (nlevel3) อิงตาม BMI เด็ก
+        const bmi = w / Math.pow(h / 100, 2);
+        if (bmi > 18.5) n3 = '1';      // อ้วน
+        else if (bmi > 17.5) n3 = '2'; // เริ่มอ้วน
+        else if (bmi > 16.5) n3 = '3'; // ท้วม
+        else if (bmi < 13.5) n3 = '6'; // ผอม
+        else if (bmi < 14.5) n3 = '5'; // ค่อนข้างผอม
+        
+        // 2. ประเมิน นน./อายุ (nlevel)
+        const avgW = (age * 0.25) + 3; // สูตรค่าเฉลี่ย นน.
+        if (w > avgW * 1.3) n1 = '1';
+        else if (w > avgW * 1.15) n1 = '2';
+        else if (w < avgW * 0.7) n1 = '5';
+        else if (w < avgW * 0.85) n1 = '4';
+
+        // 3. ประเมิน ส่วนสูง/อายุ (nlevel2)
+        const avgH = (age * 0.8) + 50; // สูตรค่าเฉลี่ย ส่วนสูง
+        if (h > avgH * 1.1) n2 = '1';
+        else if (h > avgH * 1.05) n2 = '2';
+        else if (h < avgH * 0.9) n2 = '5';
+        else if (h < avgH * 0.95) n2 = '4';
+
+        setChildDev(prev => ({ ...prev, nlevel: n1, nlevel2: n2, nlevel3: n3 }));
+      }
+    }
+  }, [vitals.weight, vitals.height, patient?.age_months]);
+  // 👆👆👆👆 [สิ้นสุดโค้ดที่ต้องแทรก] 👆👆👆👆
+
+
+  // 🧠 ให้ AI ทำงานอัตโนมัติ (โค้ดเดิมของคุณสิรภพ จะอยู่ต่อจากตรงนี้ครับ)
   useEffect(() => {
     if (vitals.sysDia !== '---' || vitals.weight !== '---' || vitals.sugar !== '---') {
       const fetchAI = async () => {
@@ -881,10 +952,30 @@ function App() {
     setShowConfirmQueueModal(false); 
     setIsSubmitting(true); 
 
+    // คำนวณอายุเป็นปีคร่าวๆ จาก age_months ของคนไข้
+    const ageYears = patient?.age_months !== undefined ? Math.floor(patient.age_months / 12) : 0;
+    const isFemale = patient?.sex === '2' || patient?.sex === 'หญิง';
+    
+    // เช็คเงื่อนไขคัดกรองมะเร็งเต้านมตรงนี้เลย (หญิง อายุ 30-70 ปี)
+    const needBreastCancerScreening = isFemale && ageYears >= 30 && ageYears <= 70;
+
     const payload = {
       cid: patient.cid,
       vhv_cid: currentVhv ? currentVhv.cid : null,
-      serviceType: serviceType, // 👈 ส่งประเภทบริการ ('health_station' หรือ 'screening') ไปให้ Backend
+      ageMonths: patient?.age_months, // 👈 แนบอายุเดือนไปให้หลังบ้าน
+      headCircum: vitals.headCircum === '---' ? 0 : parseFloat(vitals.headCircum), // 👈 แนบรอบศีรษะ
+      nlevel: childDev.nlevel,           // 👈 เพิ่ม 4 บรรทัดนี้
+      nlevel2: childDev.nlevel2,         // 👈
+      nlevel3: childDev.nlevel3,         // 👈
+      growdevelop: childDev.growdevelop, // 👈
+      serviceType: serviceType,
+      smokeStatus: smokeStatus,     // 👈 เพิ่มบรรทัดนี้
+      alcoholStatus: alcoholStatus, // 👈 เพิ่มบรรทัดนี้
+      smokeAmount: smokeAmount,   // 👈 เพิ่มบรรทัดนี้
+      smokeWake: smokeWake,       // 👈 เพิ่มบรรทัดนี้
+      smokeAdvice: smokeAdvice,   // 👈 เพิ่มบรรทัดนี้
+      alcoholAdvice: alcoholAdvice, // 👈 เพิ่มบรรทัดนี้
+      breastCancerScreening: needBreastCancerScreening, // 👈 ส่งสถานะนี้ไปหลังบ้านตรงๆ เลย
       weight: vitals.weight === '' || vitals.weight === '---' ? 0 : parseFloat(vitals.weight),
       height: vitals.height === '' || vitals.height === '---' ? 0 : parseFloat(vitals.height),
       sysDia: vitals.sysDia === '---' ? '' : vitals.sysDia, 
@@ -1532,129 +1623,181 @@ function App() {
             </button>
           </div>
 
-          {/* 🩺 โซนปุ่มเลือกประเภทการรับบริการ (ย้ายมาไว้ใต้รูปผู้ป่วย + เอาแถบสีด้านซ้ายออก) */}
-          <div style={{ 
-            background: '#f8fafc', 
-            padding: '18px', 
-            borderRadius: '15px', 
-            border: '2px solid #e2e8f0', 
-            maxWidth: '750px', 
-            margin: '20px auto', 
-            textAlign: 'left',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.03)'
-          }}>
-            <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1e293b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <i className="fa-solid fa-clipboard-check" style={{ color: '#3b82f6', fontSize: '20px' }}></i> 
-              กรุณาเลือกประเภทการรับบริการก่อนบันทึก:
-            </div>
+          {/* 👶 / 🧑 โซนแสดงผล Dynamic (แยกระหว่างเด็ก 0-60 เดือน และ ผู้ใหญ่) */}
+          {patient?.age_months !== undefined && patient?.age_months <= 60 ? (
+            
+            /* ================= 👶 โหมดเด็ก (0-60 เดือน) ================= */
+            <div className="vitals-container" style={{ marginTop: '20px' }}>
+              <div style={{ background: '#fef3c7', padding: '25px', borderRadius: '20px', border: '2px dashed #f59e0b', marginBottom: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.04)', maxWidth: '900px', margin: '0 auto' }}>
+                <h3 style={{ margin: '0 0 20px 0', color: '#d97706', textAlign: 'center', fontSize: '22px' }}>
+                  <i className="fa-solid fa-baby"></i> ข้อมูลโภชนาการเด็ก (อายุ {patient.age_months} เดือน)
+                </h3>
+                
+                {/* 3 ช่องกรอกหลัก: น้ำหนัก, ส่วนสูง, เส้นรอบศีรษะ */}
+                <div className="vitals-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '20px' }}>
+                  {[
+                    { id: 'weight', label: 'น้ำหนัก', unit: 'กิโลกรัม', val: vitals.weight },
+                    { id: 'height', label: 'ส่วนสูง', unit: 'เซนติเมตร', val: vitals.height },
+                    { id: 'headCircum', label: 'เส้นรอบศีรษะ', unit: 'เซนติเมตร', val: vitals.headCircum }
+                  ].map((item, idx) => (
+                    <div className="vital-cell" key={idx} style={{ background: 'white', border: '1px solid #fcd34d' }}>
+                      <div className="vital-label" style={{ color: '#b45309' }}>{item.label}<br/><small>{item.unit}</small></div>
+                      <div className="vital-value-box" style={{ padding: 0, display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="text" value={item.val === '---' ? '' : item.val} 
+                          onChange={(e) => handleVitalChange(item.id, e.target.value)}
+                          onBlur={(e) => { if (e.target.value.trim() === '') handleVitalChange(item.id, '---'); }}
+                          placeholder="---"
+                          style={{ width: '100%', height: '100%', background: 'transparent', border: 'none', textAlign: 'center', fontSize: '26px', fontWeight: 'bold', color: '#78350f', outline: 'none' }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-              {/* ปุ่มที่ 1: HealthStation */}
-              <button
-                type="button"
-                onClick={() => setServiceType('health_station')}
-                style={{
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: serviceType === 'health_station' ? '3px solid #0284c7' : '2px solid #cbd5e1',
-                  backgroundColor: serviceType === 'health_station' ? '#e0f2fe' : 'white',
-                  color: serviceType === 'health_station' ? '#0369a1' : '#64748b',
-                  fontSize: '18px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s',
-                  boxShadow: serviceType === 'health_station' ? '0 4px 12px rgba(2, 132, 199, 0.2)' : 'none'
-                }}
-              >
-                <i className="fa-solid fa-house-chimney-medical" style={{ fontSize: '28px' }}></i>
-                <span>HealthStation</span>
-                <small style={{ fontSize: '13px', fontWeight: 'normal', opacity: 0.9 }}>
-                  ผู้ป่วย NCD กลุ่มสีเขียว
-                </small>
-              </button>
-
-              {/* ปุ่มที่ 2: คัดกรอง */}
-              <button
-                type="button"
-                onClick={() => setServiceType('screening')}
-                style={{
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: serviceType === 'screening' ? '3px solid #8b5cf6' : '2px solid #cbd5e1',
-                  backgroundColor: serviceType === 'screening' ? '#f3e8ff' : 'white',
-                  color: serviceType === 'screening' ? '#6d28d9' : '#64748b',
-                  fontSize: '18px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s',
-                  boxShadow: serviceType === 'screening' ? '0 4px 12px rgba(139, 92, 246, 0.2)' : 'none'
-                }}
-              >
-                <i className="fa-solid fa-magnifying-glass-chart" style={{ fontSize: '28px' }}></i>
-                <span>คัดกรอง</span>
-                <small style={{ fontSize: '13px', fontWeight: 'normal', opacity: 0.9 }}>
-                  เบาหวาน-ความดัน 35 ปีขึ้นไป
-                </small>
-              </button>
-            </div>
-
-            {/* แถบแสดงตัวอย่างข้อความที่จะถูกบันทึกลง JHCIS (ไร้แถบสีด้านซ้าย) */}
-            <div style={{ 
-              marginTop: '12px', 
-              padding: '12px 16px', 
-              background: 'white', 
-              borderRadius: '10px', 
-              border: '1px solid #e2e8f0', 
-              fontSize: '14px', 
-              color: '#334155',
-              textAlign: 'center'
-            }}>
-              <strong>ข้อความที่จะบันทึกเข้า JHCIS:</strong>{' '}
-              {serviceType === 'screening' 
-                ? 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป' 
-                : 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.'}
-            </div>
-          </div>
-
-          <div className="vitals-container">
-            <div className="vitals-grid">
-              {[
-                { id: 'height', label: 'ส่วนสูง', unit: 'เซนติเมตร', val: vitals.height },
-                { id: 'weight', label: 'น้ำหนัก', unit: 'กิโลกรัม', val: vitals.weight },
-                { id: 'waist', label: 'รอบเอว', unit: 'เซนติเมตร', val: vitals.waist },
-                { id: 'bmi', label: 'ดัชนีมวลกาย', unit: 'กิโลกรัม/เมตร²', val: vitals.bmi },
-                { id: 'temp', label: 'อุณหภูมิ', unit: 'องศาเซลเซียส', val: vitals.temp },
-                { id: 'spo2', label: 'O₂ sat', unit: '%', val: vitals.spo2 },
-                { id: 'sysDia', label: 'ความดันโลหิต', unit: 'มิลลิเมตร/ปรอท', val: vitals.sysDia },
-                { id: 'pulse', label: 'ชีพจร', unit: 'ครั้ง/นาที', val: vitals.pulse },
-                { id: 'sugar', label: 'น้ำตาลในเลือด', unit: 'มิลลิกรัม/เดซิลิตร', val: vitals.sugar },
-              ].map((item, idx) => (
-                <div className="vital-cell" key={idx}>
-                  <div className="vital-label">{item.label}<br/><small>{item.unit}</small></div>
-                  <div className="vital-value-box" style={{ padding: 0, display: 'flex', alignItems: 'center' }}>
-                    <input
-                      type="text"
-                      value={item.val === '---' ? '' : item.val} 
-                      onChange={(e) => handleVitalChange(item.id, e.target.value)}
-                      onBlur={(e) => { if (e.target.value.trim() === '') handleVitalChange(item.id, '---'); }}
-                      placeholder="---"
-                      style={{ width: '100%', height: '100%', background: 'transparent', border: 'none', textAlign: 'center', fontSize: '26px', fontWeight: 'bold', color: '#1f2937', outline: 'none' }}
-                    />
+                {/* กล่องแสดงข้อความที่จะส่งเข้า JHCIS */}
+                <div style={{ padding: '15px', background: 'white', borderRadius: '12px', border: '1px dashed #f59e0b', fontSize: '14px', color: '#b45309', textAlign: 'left' }}>
+                  <strong style={{ fontSize: '15px' }}>ข้อมูลที่จะบันทึกเข้า JHCIS:</strong><br/>
+                  <div style={{ marginTop: '8px', paddingLeft: '10px', borderLeft: '3px solid #fcd34d', lineHeight: '1.6' }}>
+                    <strong>อาการสำคัญ:</strong> ตรวจภาวะโภชนาการเด็ก 0-60 เดือน<br/>
+                    <strong>อาการร่วม:</strong> ตรวจกระตุ้นพัฒนาการ อายุ {patient.age_months} เดือน สมวัย
                   </div>
                 </div>
-              ))}
+
+              </div>
             </div>
-          </div>
+
+            
+            
+
+          ) : (
+
+            /* ================= 🧑 โหมดผู้ใหญ่ (> 60 เดือน) ================= */
+            <div style={{ background: 'white', padding: '30px', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px rgba(0,0,0,0.04)', maxWidth: '900px', margin: '20px auto' }}>
+              
+              {/* 1. โซนปุ่มเลือกประเภทการรับบริการ */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '15px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setServiceType('health_station')} 
+                  style={{ 
+                    padding: '25px 20px', borderRadius: '15px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'all 0.2s',
+                    border: serviceType === 'health_station' ? '2px solid #0ea5e9' : '1px solid #cbd5e1', 
+                    backgroundColor: serviceType === 'health_station' ? '#f0f9ff' : 'white', 
+                    color: serviceType === 'health_station' ? '#0ea5e9' : '#64748b', 
+                    boxShadow: serviceType === 'health_station' ? '0 4px 15px rgba(14, 165, 233, 0.15)' : 'none' 
+                  }}
+                >
+                  <i className="fa-solid fa-house-chimney-medical" style={{ fontSize: '32px' }}></i>
+                  <span style={{ fontSize: '20px', fontWeight: 'bold' }}>Health Station</span>
+                  <small style={{ fontSize: '14px', opacity: 0.8 }}>ผู้ป่วย NCD กลุ่มสีเขียว</small>
+                </button>
+
+                <button 
+                  type="button" 
+                  onClick={() => setServiceType('screening')} 
+                  style={{ 
+                    padding: '25px 20px', borderRadius: '15px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'all 0.2s',
+                    border: serviceType === 'screening' ? '2px solid #6366f1' : '1px solid #cbd5e1', 
+                    backgroundColor: serviceType === 'screening' ? '#eef2ff' : 'white', 
+                    color: serviceType === 'screening' ? '#4f46e5' : '#64748b', 
+                    boxShadow: serviceType === 'screening' ? '0 4px 15px rgba(99, 102, 241, 0.15)' : 'none' 
+                  }}
+                >
+                  <i className="fa-solid fa-magnifying-glass-chart" style={{ fontSize: '32px' }}></i>
+                  <span style={{ fontSize: '20px', fontWeight: 'bold' }}>คัดกรอง</span>
+                  <small style={{ fontSize: '14px', opacity: 0.8 }}>เบาหวาน-ความดัน 35 ปีขึ้นไป</small>
+                </button>
+              </div>
+
+              {/* ข้อความ JHCIS */}
+              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '15px', color: '#475569', textAlign: 'center', marginBottom: '25px' }}>
+                <strong>ข้อความที่จะบันทึกเข้า JHCIS:</strong> {serviceType === 'screening' ? 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป' : 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.'}
+              </div>
+
+              {/* 2. โซนกรอกค่าวัดสัญญาณชีพ (ขอบมนสวยงาม) */}
+              <div className="vitals-grid" style={{ marginBottom: '25px' }}>
+                {[
+                  { id: 'height', label: 'ส่วนสูง', unit: 'เซนติเมตร', val: vitals.height },
+                  { id: 'weight', label: 'น้ำหนัก', unit: 'กิโลกรัม', val: vitals.weight },
+                  { id: 'waist', label: 'รอบเอว', unit: 'เซนติเมตร', val: vitals.waist },
+                  { id: 'bmi', label: 'ดัชนีมวลกาย', unit: 'กิโลกรัม/เมตร²', val: vitals.bmi },
+                  { id: 'temp', label: 'อุณหภูมิ', unit: 'องศาเซลเซียส', val: vitals.temp },
+                  { id: 'spo2', label: 'O₂ sat', unit: '%', val: vitals.spo2 },
+                  { id: 'sysDia', label: 'ความดันโลหิต', unit: 'มิลลิเมตร/ปรอท', val: vitals.sysDia },
+                  { id: 'pulse', label: 'ชีพจร', unit: 'ครั้ง/นาที', val: vitals.pulse },
+                  { id: 'sugar', label: 'น้ำตาลในเลือด', unit: 'มิลลิกรัม/เดซิลิตร', val: vitals.sugar },
+                ].map((item, idx) => (
+                  <div className="vital-cell" key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                    <div className="vital-label">{item.label}<br/><small>{item.unit}</small></div>
+                    <div className="vital-value-box" style={{ padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <input
+                        type="text" value={item.val === '---' ? '' : item.val} 
+                        onChange={(e) => handleVitalChange(item.id, e.target.value)}
+                        onBlur={(e) => { if (e.target.value.trim() === '') handleVitalChange(item.id, '---'); }}
+                        placeholder="---"
+                        style={{ width: '100%', height: '100%', background: 'transparent', border: 'none', textAlign: 'center', fontSize: '26px', fontWeight: 'bold', color: '#1f2937', outline: 'none' }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 3. โซนประวัติบุหรี่/สุรา (ดีไซน์แยกกล่องขาว เรียงต่อท้าย) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                
+                {/* กรอบบุหรี่ */}
+                <div style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontWeight: 'bold', color: '#334155', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '18px' }}>
+                    <i className="fa-solid fa-smoking" style={{ color: '#64748b' }}></i> ประวัติสูบบุหรี่
+                  </div>
+                  <select value={smokeStatus} onChange={(e) => setSmokeStatus(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px', cursor: 'pointer', textAlign: 'center' }}>
+                    <option value="">-- กรุณาเลือก --</option>
+                    <option value="ไม่สูบ">ไม่สูบ</option>
+                    <option value="เคยสูบแต่เลิกแล้ว">เคยสูบแต่เลิกแล้ว</option>
+                    <option value="ยังสูบอยู่">ยังสูบอยู่</option>
+                  </select>
+                  {smokeStatus === 'ยังสูบอยู่' && (
+                    <div style={{ marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', textAlign: 'left' }}>
+                      <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>1. ปริมาณที่สูบ (มวน/วัน):</div>
+                      <select value={smokeAmount} onChange={(e) => setSmokeAmount(e.target.value)} style={{ width: '100%', padding: '8px', marginBottom: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', cursor: 'pointer' }}>
+                        <option value="1B509">-- ไม่ระบุปริมาณ --</option><option value="1B501">1-10 มวนต่อวัน</option><option value="1B502">11-19 มวนต่อวัน</option><option value="1B503">20 มวนขึ้นไปต่อวัน</option>
+                      </select>
+                      <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>2. พฤติกรรมสูบหลังตื่นนอน:</div>
+                      <select value={smokeWake} onChange={(e) => setSmokeWake(e.target.value)} style={{ width: '100%', padding: '8px', marginBottom: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', cursor: 'pointer' }}>
+                        <option value="">-- ไม่ระบุ --</option><option value="1B504">สูบมวนแรก น้อยกว่า 30 นาที</option><option value="1B505">สูบมวนแรก 30 นาที - 1 ชั่วโมง</option><option value="1B506">สูบมวนแรก 1 ชั่วโมงขึ้นไป</option>
+                      </select>
+                      <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>3. การให้คำปรึกษา:</div>
+                      <select value={smokeAdvice} onChange={(e) => setSmokeAdvice(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', cursor: 'pointer' }}>
+                        <option value="">-- ไม่ระบุ --</option><option value="1B530">ให้คำแนะนำสั้นๆ</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* กรอบสุรา */}
+                <div style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontWeight: 'bold', color: '#334155', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '18px' }}>
+                    <i className="fa-solid fa-wine-glass" style={{ color: '#64748b' }}></i> ประวัติดื่มสุรา
+                  </div>
+                  <select value={alcoholStatus} onChange={(e) => setAlcoholStatus(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px', cursor: 'pointer', textAlign: 'center' }}>
+                    <option value="">-- กรุณาเลือก --</option><option value="ไม่ดื่ม">ไม่ดื่ม</option><option value="เคยดื่มแต่เลิกแล้ว">เคยดื่มแต่เลิกแล้ว</option><option value="ยังดื่มอยู่">ยังดื่มอยู่</option>
+                  </select>
+                  {alcoholStatus === 'ยังดื่มอยู่' && (
+                    <div style={{ marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', textAlign: 'left' }}>
+                      <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '4px' }}>การให้คำแนะนำ/ปรึกษา:</div>
+                      <select value={alcoholAdvice} onChange={(e) => setAlcoholAdvice(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', cursor: 'pointer' }}>
+                        <option value="">-- ไม่ระบุ --</option><option value="1B611">การให้คำปรึกษาแบบสั้นๆ</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+            )}
+
+          
 
           <div className="assessment-section" style={{ position: 'relative', zIndex: 20, padding: '20px', background: 'white', borderRadius: '15px', marginTop: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', textAlign: 'left' }}>
             <div className="assessment-title" style={{ fontSize: '20px', fontWeight: 'bold', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '15px', color: '#1F2937' }}>
@@ -2032,7 +2175,7 @@ function App() {
         </div>
       )}
 
-    </div>
+    </div>  
   );
 }
 
