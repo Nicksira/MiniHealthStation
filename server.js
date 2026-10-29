@@ -682,6 +682,72 @@ app.get('/jhcis-api/vhv-logs/:vhv_cid', checkApiKey, async (req, res) => {
     }
 });
 
+// ==========================================
+// 🎯 API 9: ระบบเฝ้าระวังความดันโลหิตสูง (BP Monitor Real-time)
+// ==========================================
+app.get('/jhcis-api/bp-monitor', checkApiKey, async (req, res) => {
+    const { date } = req.query; // รับค่าวันที่ (YYYY-MM-DD)
+    if (!date) return res.status(400).json({ success: false, message: 'กรุณาระบุวันที่' });
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        // 1. ดึงข้อมูลและแยกค่า sys/dia ออกจากกันเพื่อใช้คำนวณ
+        const sql = `
+            SELECT 
+                l.cid as patient_cid,
+                COALESCE(CONCAT(p.fname, ' ', p.lname), 'ไม่ทราบชื่อ') as patient_name,
+                l.sys_dia,
+                CAST(SUBSTRING_INDEX(l.sys_dia, '/', 1) AS UNSIGNED) as sys,
+                CAST(SUBSTRING_INDEX(l.sys_dia, '/', -1) AS UNSIGNED) as dia,
+                DATE_FORMAT(l.search_date, '%H:%i') as record_time,
+                COALESCE(v.name, 'ไม่ระบุ') as vhv_name
+            FROM kiosk_usage_log l
+            LEFT JOIN person p ON CONVERT(REPLACE(TRIM(p.idcard), '-', '') USING utf8) = CONVERT(REPLACE(TRIM(l.cid), '-', '') USING utf8)
+            LEFT JOIN kiosk_vhv v ON l.vhv_cid = v.cid
+            WHERE DATE(l.search_date) = ?
+              AND l.sys_dia IS NOT NULL 
+              AND l.sys_dia != '---' 
+              AND l.sys_dia != ''
+            HAVING sys >= 140 OR dia >= 90
+        `;
+        const [rows] = await connection.execute(sql, [date]);
+
+        // 2. จัดระดับความรุนแรงเป็น 3 สี (แดง, ส้ม, เหลือง)
+        const processedRows = rows.map(row => {
+            const sys = row.sys;
+            const dia = row.dia;
+            let level = 0; 
+            let colorHex = '';
+            let levelName = '';
+
+            if (sys >= 180 || dia >= 110) {
+                level = 3; colorHex = '#dc2626'; levelName = 'วิกฤต (แดง)';
+            } else if (sys >= 160 || dia >= 100) {
+                level = 2; colorHex = '#ea580c'; levelName = 'อันตราย (ส้ม)';
+            } else if (sys >= 140 || dia >= 90) {
+                level = 1; colorHex = '#eab308'; levelName = 'เฝ้าระวัง (เหลือง)';
+            }
+
+            return { ...row, level, colorHex, levelName };
+        });
+
+        // 3. เรียงลำดับความรุนแรงจาก แดง -> ส้ม -> เหลือง (ถ้าสีเดียวกันให้เรียงตามเวลาล่าสุด)
+        processedRows.sort((a, b) => {
+            if (b.level !== a.level) return b.level - a.level;
+            return b.record_time.localeCompare(a.record_time); 
+        });
+
+        res.status(200).json({ success: true, data: processedRows });
+    } catch (error) {
+        console.error('BP Monitor Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 JHCIS API รอรับข้อมูลจาก Kiosk ที่พอร์ต ${PORT}`);
 });

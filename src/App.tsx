@@ -73,6 +73,21 @@ function App() {
   const [adminTab, setAdminTab] = useState<'settings' | 'data' | 'analytics' | 'vhv'>('settings');
   const [analyticsData, setAnalyticsData] = useState<any>(null); 
 
+  const [bpDate, setBpDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [bpData, setBpData] = useState<any[]>([]);
+
+  // ฟังก์ชันดึงข้อมูลความดัน
+  const fetchBPData = async (dateStr: string) => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/jhcis-api/bp-monitor?date=${dateStr}`, { headers: { 'x-api-key': API_KEY } });
+      if (res.data.success) setBpData(res.data.data);
+    } catch (e) { console.error("Fetch BP Error"); }
+  };
+  
+
   const [offlineQueue, setOfflineQueue] = useState<any[]>(JSON.parse(localStorage.getItem('offline_queue') || '[]'));
 
   // 🟢 State สำหรับ AI ผู้ช่วยประเมิน
@@ -486,8 +501,6 @@ const NUTRITION_DICT: any = {
         // 🧹 เพิ่มโค้ดบรรทัดนี้: ล้างค่าประวัติบุหรี่และสุราทุกครั้งที่พิมพ์เลขใหม่
         setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice('');
         
-        setPatient({ ...response.data.data, cid: manualIdInput });
-      // ... โค้ดเดิมข้างล่าง ...
 
         setPatient({ ...response.data.data, cid: manualIdInput });
         await fetchPatientPhoto(manualIdInput); 
@@ -1184,6 +1197,28 @@ const NUTRITION_DICT: any = {
     }
   }, []);
 
+  // ==========================================
+  // 🔄 ระบบ Auto-Refresh สำหรับกระดานความดัน (Real-time 100%)
+  // ==========================================
+  useEffect(() => {
+    let bpInterval: NodeJS.Timeout;
+    
+    // จะทำงานเฉพาะตอนที่เปิดหน้า Admin และอยู่ที่แท็บ 'bp' เท่านั้น
+    if (showSettings && adminTab === 'bp') {
+      
+      // ตั้งเวลาแอบไปดึงข้อมูลใหม่จากหลังบ้านทุกๆ 10 วินาที
+      bpInterval = setInterval(() => {
+        fetchBPData(bpDate);
+      }, 5000); // 10000 ms = 10 วินาที (ปรับความไวได้ตามต้องการ)
+      
+    }
+    
+    // ล้างเวลาทิ้งเมื่อสลับไปแท็บอื่น เพื่อประหยัดการทำงานเครื่อง
+    return () => {
+      if (bpInterval) clearInterval(bpInterval);
+    };
+  }, [showSettings, adminTab, bpDate]);
+
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     
@@ -1330,7 +1365,16 @@ const NUTRITION_DICT: any = {
                       if(res.data && res.data.success) setAnalyticsData(res.data.data);
                   } catch(e) { console.error('ดึงข้อมูลสถิติไม่สำเร็จ'); }
               }} style={{ flex: 1, padding: '10px', background: adminTab === 'analytics' ? '#8b5cf6' : '#f1f5f9', color: adminTab === 'analytics' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', transition: '0.3s' }}>📈 สถิติงานวิจัย</button>
+            
+            <button onClick={() => {
+                  setAdminTab('bp');
+                  fetchBPData(bpDate);
+              }} style={{ flex: 1, padding: '10px', background: adminTab === 'bp' ? '#dc2626' : '#f1f5f9', color: adminTab === 'bp' ? 'white' : '#64748b', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', transition: '0.3s' }}>
+                  <i className="fa-solid fa-heart-pulse"></i> เฝ้าระวังความดัน
+              </button>
             </div>
+
+            
 
             {adminTab === 'settings' && (
               <div>
@@ -1441,6 +1485,8 @@ const NUTRITION_DICT: any = {
               if (!analyticsData) {
                 return <div style={{ textAlign: 'center', padding: '40px', color: '#8b5cf6' }}><p>กำลังโหลด...</p></div>;
               }
+
+              
 
               const ageChartData = [
                 { name: '0-15 ปี', value: analyticsData?.ageGroups?.gen1 || 0, fill: '#fde047' },
@@ -1568,9 +1614,95 @@ const NUTRITION_DICT: any = {
                 </div>
               );
             })()}
+
+            {/* 👇👇 วางโค้ดแท็บความดันตรงนี้ (ต่อท้ายแท็บสถิติ) 👇👇 */}
+            {/* ========================================== */}
+            {/* 🩸 กระดานเฝ้าระวังความดันโลหิตสูง (BP Monitor) */}
+            {/* ========================================== */}
+            {adminTab === 'bp' && (
+              <div style={{ animation: 'fadeIn 0.5s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #fee2e2', paddingBottom: '10px' }}>
+                    <h2 style={{ color: '#dc2626', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+  <i className="fa-solid fa-heart-pulse fa-beat"></i> เฝ้าระวังความดันโลหิตสูง (&gt;=140/90)
+</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontWeight: 'bold', color: '#64748b' }}>เลือกวันที่:</span>
+                      <input 
+                        type="date" 
+                        value={bpDate} 
+                        onChange={(e) => {
+                          setBpDate(e.target.value);
+                          fetchBPData(e.target.value);
+                        }}
+                        style={{ padding: '8px 15px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '16px', color: '#334155', fontWeight: 'bold', outline: 'none' }}
+                      />
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {bpData.length > 0 ? bpData.map((item, idx) => (
+                     <div 
+                        key={idx} 
+                        style={{ 
+                            display: 'flex', 
+                            alignItems: 'stretch', 
+                            justifyContent: 'space-between', 
+                            background: 'white', 
+                            borderRadius: '12px', 
+                            border: `1px solid #e2e8f0`, /* 👈 แก้ตรงนี้: เปลี่ยนเป็นเส้นขอบบางๆ เท่ากันทุกด้าน */
+                            boxShadow: '0 4px 6px rgba(0,0,0,0.05)', 
+                            transition: 'transform 0.2s',
+                            overflow: 'hidden' 
+                        }} 
+                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.01)'} 
+                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                     >
+                         {/* 🔹 ส่วนซ้าย: ข้อมูลคนไข้และ อสม. (พื้นหลังขาว) */}
+                         <div style={{ padding: '15px 25px', flex: 1 }}>
+                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>
+                              <i className="fa-regular fa-user" style={{ color: item.colorHex, marginRight: '8px' }}></i>
+                              {item.patient_name}
+                            </div>
+                            <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px', display: 'flex', gap: '15px' }}>
+                                <span><i className="fa-regular fa-clock"></i> เวลา {item.record_time} น.</span>
+                                <span><i className="fa-solid fa-user-nurse"></i> โดย อสม: {item.vhv_name}</span>
+                            </div>
+                         </div>
+                         
+                         {/* 🔹 ส่วนขวา: ค่าความดัน (พื้นหลังสีจางๆ ยืดเต็มกรอบ) */}
+                         <div style={{ 
+                             textAlign: 'center', 
+                             background: `${item.colorHex}15`, 
+                             padding: '15px 30px', 
+                             display: 'flex', 
+                             flexDirection: 'column', 
+                             justifyContent: 'center',
+                             minWidth: '160px' 
+                         }}>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: item.colorHex, letterSpacing: '1px', lineHeight: '1.2' }}>
+                              {item.sys_dia}
+                            </div>
+                            <div style={{ fontSize: '14px', color: item.colorHex, fontWeight: 'bold', marginTop: '2px' }}>
+                              {item.levelName}
+                            </div>
+                         </div>
+                     </div>
+                  )) : (
+                     <div style={{ textAlign: 'center', padding: '50px', background: '#f8fafc', borderRadius: '15px', border: '2px dashed #cbd5e1' }}>
+                        <i className="fa-solid fa-heart-circle-check" style={{ fontSize: '50px', color: '#10b981', marginBottom: '15px' }}></i>
+                        <h3 style={{ color: '#475569', margin: 0 }}>ไม่มีผู้ป่วยที่ความดันโลหิตเกินเกณฑ์ในวันที่เลือกครับ</h3>
+                     </div>
+                  )}
+                </div>
+              </div>
+            )}
             
           </div>
         </main>
+
+            
+            
+          
       ) : !isLoggedIn ? (
         
         <main className="home-screen" style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
