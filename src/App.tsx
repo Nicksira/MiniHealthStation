@@ -428,8 +428,13 @@ const NUTRITION_DICT: any = {
       }
       setPatientPhoto(img_str);
 
-      setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---' });
+      // ... โค้ดเดิมข้างบน ...
+      setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---', headCircum: '---' });
       setAiResponse('');
+      
+      // 🧹 เพิ่มโค้ดบรรทัดนี้: ล้างค่าประวัติบุหรี่และสุราทุกครั้งที่เสียบบัตรใหม่
+      setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice('');
+      // ... โค้ดเดิมข้างล่าง ...
 
       try {
         const jhcisResponse = await axios.get(`${API_BASE_URL}/jhcis-api/patient/${cid}`, {
@@ -473,9 +478,16 @@ const NUTRITION_DICT: any = {
         timeout: 5000 
       });
       
+      // ... โค้ดเดิมข้างบน ...
       if (response.data.success) {
-        setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---' });
+        setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---', headCircum: '---' });
         setAiResponse('');
+        
+        // 🧹 เพิ่มโค้ดบรรทัดนี้: ล้างค่าประวัติบุหรี่และสุราทุกครั้งที่พิมพ์เลขใหม่
+        setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice('');
+        
+        setPatient({ ...response.data.data, cid: manualIdInput });
+      // ... โค้ดเดิมข้างล่าง ...
 
         setPatient({ ...response.data.data, cid: manualIdInput });
         await fetchPatientPhoto(manualIdInput); 
@@ -501,10 +513,34 @@ const NUTRITION_DICT: any = {
     setPatientPhoto(null);
     setPatientImage(null); 
     setIsTestingMode(false);
-    setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---' });
+    setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---', headCircum: '---' });
+    
+    // 🧹 เพิ่มโค้ดบรรทัดนี้: ล้างค่าตอนออกจากระบบ
+    setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice('');
   };
 
   const handleManualRead = async () => {
+    // 🚨 1. เช็คว่ามี อสม. ล็อกอินหรือยัง ถ้ายังให้เด้ง Popup แจ้งเตือน
+    if (!currentVhv) {
+        Swal.fire({
+            title: 'แจ้งเตือน',
+            text: 'กรุณาลงชื่อเข้าปฏิบัติงาน อสม. ก่อนสอดบัตรหรือค้นหาประวัติคนไข้ค่ะ',
+            icon: 'warning',
+            confirmButtonText: '<i class="fa-solid fa-user-nurse"></i> ลงชื่อ อสม.',
+            confirmButtonColor: '#8b5cf6',
+            showCancelButton: true,
+            cancelButtonText: 'ปิด'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // ถ้ากดปุ่ม "ลงชื่อ อสม." ให้เปิดหน้าต่างกรอกเลขบัตร อสม. ขึ้นมาทันที
+                setShowVhvLoginModal(true);
+                setVhvIdInput('');
+                setVhvLoginError('');
+            }
+        });
+        return; // หยุดการทำงาน ไม่ให้อ่านบัตร
+    }
+
     setLoading(true);
     try {
       const response = await axios.get('http://localhost:8189/api/smartcard/read?readImageFlag=true');
@@ -521,6 +557,9 @@ const NUTRITION_DICT: any = {
     let checkCardInterval: NodeJS.Timeout;
     if (!loading && !showSettings && !isSubmitting && !showManualIdModal) {
       checkCardInterval = setInterval(async () => {
+        // 🚨 บล็อคไม่ให้เครื่องอ่านบัตรดูดข้อมูลอัตโนมัติ ถ้ายังไม่ล็อกอิน อสม.
+        if (!currentVhv) return;
+
         try {
           const response = await axios.get('http://localhost:8189/api/smartcard/read?readImageFlag=true', { timeout: 1500 });
           if (response.data && response.data.pid) {
@@ -535,7 +574,7 @@ const NUTRITION_DICT: any = {
       }, 2000);
     }
     return () => clearInterval(checkCardInterval);
-  }, [isLoggedIn, loading, showSettings, isTestingMode, isSubmitting, showManualIdModal]);
+  }, [isLoggedIn, loading, showSettings, isTestingMode, isSubmitting, showManualIdModal, currentVhv]); // 👈 เพิ่ม currentVhv ตรงนี้ด้วย
 
   const connectBluetoothO2 = async () => {
     try {
@@ -945,6 +984,24 @@ const NUTRITION_DICT: any = {
       alert("⚠️ ไม่พบข้อมูลบัตรประชาชน กรุณาเสียบบัตรใหม่อีกครั้ง");
       return;
     }
+
+    // 🚨 ตรวจสอบว่าเป็นผู้ใหญ่ (อายุเกิน 60 เดือน) ถึงจะบังคับตรวจบุหรี่/สุรา
+    const isAdult = patient?.age_months === undefined || patient?.age_months > 60;
+    
+    if (isAdult) {
+      if (!smokeStatus || !alcoholStatus) {
+        // เด้ง Popup แจ้งเตือนถ้ายาวังไม่ได้เลือก
+        Swal.fire({
+          title: 'ข้อมูลไม่ครบถ้วน!',
+          text: 'กรุณาระบุ "ประวัติสูบบุหรี่" และ "ประวัติดื่มสุรา" ให้ครบถ้วนก่อนบันทึกข้อมูล',
+          icon: 'warning',
+          confirmButtonText: 'รับทราบ',
+          confirmButtonColor: '#f59e0b'
+        });
+        return; // หยุดการทำงาน ไม่ให้เด้งหน้าต่างยืนยัน
+      }
+    }
+
     setShowConfirmQueueModal(true);
   };
 
@@ -1530,7 +1587,32 @@ const NUTRITION_DICT: any = {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', position: 'relative', zIndex: 1, marginTop: '20px', width: '100%' }}>
             
             <button 
-              onClick={() => { setShowManualIdModal(true); setManualIdInput(''); setManualIdError(''); }}
+              onClick={() => { 
+                // 🚨 3. ดักจับการค้นหาคีย์มือ ถ้ายังไม่ล็อกอิน อสม. ให้เด้งเตือน
+                if (!currentVhv) {
+                    Swal.fire({
+                        title: 'แจ้งเตือน',
+                        text: 'กรุณาลงชื่อเข้าปฏิบัติงาน อสม. ก่อนเริ่มให้บริการคนไข้ค่ะ',
+                        icon: 'warning',
+                        confirmButtonText: '<i class="fa-solid fa-user-nurse"></i> ลงชื่อ อสม.',
+                        confirmButtonColor: '#8b5cf6',
+                        showCancelButton: true,
+                        cancelButtonText: 'ปิด'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            setShowVhvLoginModal(true);
+                            setVhvIdInput('');
+                            setVhvLoginError('');
+                        }
+                    });
+                    return;
+                }
+                
+                // ถ้าล็อกอินแล้ว ให้เปิดหน้าต่างค้นหาบัตรปกติ
+                setShowManualIdModal(true); 
+                setManualIdInput(''); 
+                setManualIdError(''); 
+              }}
               style={{ 
                 padding: '12px 35px', 
                 background: '#4bc0c8', 
