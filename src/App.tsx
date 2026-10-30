@@ -1523,18 +1523,20 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                     <tbody>
                       {vhvStatsData.length > 0 ? vhvStatsData.map((vhv: any, idx: number) => (
                         <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}>
+                          {/* 👇 โค้ดใหม่ที่แก้เงื่อนไขให้รองรับทั้งตัวเลข 1 และ String '1' 👇 */}
                           <td style={{ padding: '15px', textAlign: 'left', fontWeight: 'bold', color: '#334155', position: 'sticky', left: 0, background: 'inherit' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-       {vhv.vhv_name}
-       {/* 🟢 ไอคอนสถานะ Online */}
-       {vhv.is_online === 1 && (
-          <span style={{ fontSize: '11px', color: '#10b981', background: '#d1fae5', padding: '2px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '6px', height: '6px', background: '#10b981', borderRadius: '50%', display: 'inline-block', animation: 'pulse 1.5s infinite' }}></span>
-            Online
-          </span>
-       )}
-    </div>
-  </td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                               {vhv.vhv_name}
+                               {/* 🟢 ไอคอนสถานะ Online (ใช้ Number() เพื่อความชัวร์) */}
+                               {Number(vhv.is_online) === 1 && (
+                                  <span style={{ fontSize: '11px', color: '#10b981', background: '#d1fae5', padding: '2px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <span style={{ width: '6px', height: '6px', background: '#10b981', borderRadius: '50%', display: 'inline-block', animation: 'pulse 1.5s infinite' }}></span>
+                                    Online
+                                  </span>
+                               )}
+                            </div>
+                          </td>
+                          
                           <td style={{ padding: '15px' }}>
                              <button 
   onClick={() => {
