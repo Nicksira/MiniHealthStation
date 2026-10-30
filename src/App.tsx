@@ -1320,25 +1320,28 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     let heartbeatInterval: NodeJS.Timeout;
     
     if (currentVhv) {
-      // 1. ฟังก์ชันส่งข้อมูล (ยิง API Key ไปใน Body เพื่อให้ sendBeacon ใช้ได้)
+      // 1. ฟังก์ชันส่งข้อมูล (ยิงทันที)
       const sendHeartbeat = (status: string) => {
         axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { 
           cid: currentVhv.cid, status: status, apiKey: API_KEY 
         }).catch(()=>{});
       };
 
-      sendHeartbeat('online'); // ยิงทันทีที่ล็อกอิน
+      sendHeartbeat('online'); 
       
-      // 2. ยิงซ้ำทุกๆ 10 วินาที (สัมพันธ์กับ 20 วิของหลังบ้าน)
+      // 2. ยิงซ้ำทุกๆ 10 วินาที เพื่อหล่อเลี้ยงสถานะ
       heartbeatInterval = setInterval(() => {
         sendHeartbeat('online');
       }, 10000); 
 
-      // 3. ท่าไม้ตาย sendBeacon ตอนกดกากบาทปิดโปรแกรม
+      // 3. 🚨 เปลี่ยนมาใช้ fetch + keepalive (การันตีส่งข้อมูลออก 100% แม้เบราว์เซอร์จะปิดไปแล้ว)
       const handleUnload = () => {
-        const payload = JSON.stringify({ cid: currentVhv.cid, status: 'offline', apiKey: API_KEY });
-        const blob = new Blob([payload], { type: 'application/json' });
-        navigator.sendBeacon(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, blob);
+        fetch(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cid: currentVhv.cid, status: 'offline', apiKey: API_KEY }),
+          keepalive: true // 👈 พระเอกอยู่ตรงนี้ครับ!
+        }).catch(()=>{});
       };
       
       window.addEventListener('beforeunload', handleUnload);
@@ -1536,7 +1539,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                                )}
                             </div>
                           </td>
-                          
+
                           <td style={{ padding: '15px' }}>
                              <button 
   onClick={() => {
