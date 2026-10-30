@@ -1723,22 +1723,29 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                         onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'} 
                         onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
                      >
-                         <div style={{ padding: '15px 25px', flex: 1 }}>
-                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>
-                              <i className="fa-regular fa-user" style={{ color: item.colorHex, marginRight: '8px' }}></i>
-                              {item.patient_name}
-                            </div>
-                            <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px', display: 'flex', gap: '15px', alignItems: 'center' }}>
-                                <span><i className="fa-regular fa-clock"></i> เวลา {item.record_time} น.</span>
-                                <span><i className="fa-solid fa-user-nurse"></i> โดย อสม: {item.vhv_name}</span>
-                                
-                                {/* 👈 โชว์ติ๊กถูกสีเขียว ถ้ามีการกรอกโน้ตติดตามแล้ว */}
+                         {/* 🔹 ส่วนซ้าย: ข้อมูลคนไข้และ อสม. (พื้นหลังขาว) */}
+                         <div style={{ padding: '15px 25px', flex: 1, minWidth: 0 }}>
+                            
+                            {/* แถวที่ 1: ชื่อคนไข้ + ป้ายติดตามแล้ว */}
+                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  <i className="fa-regular fa-user" style={{ color: item.colorHex, marginRight: '8px' }}></i>
+                                  {item.patient_name}
+                                </div>
+                                {/* 👈 ย้ายป้ายติดตามแล้ว มาไว้ข้างชื่อคนไข้ */}
                                 {item.follow_up_note && (
-                                  <span style={{ color: '#10b981', fontWeight: 'bold', background: '#d1fae5', padding: '2px 8px', borderRadius: '20px' }}>
+                                  <span style={{ color: '#10b981', fontSize: '13px', fontWeight: 'bold', background: '#d1fae5', padding: '4px 10px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                                     <i className="fa-solid fa-circle-check"></i> ติดตามแล้ว
                                   </span>
                                 )}
                             </div>
+
+                            {/* แถวที่ 2: เวลา + ชื่อ อสม. */}
+                            <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px', display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                                <span style={{ whiteSpace: 'nowrap' }}><i className="fa-regular fa-clock"></i> เวลา {item.record_time} น.</span>
+                                <span style={{ whiteSpace: 'nowrap' }}><i className="fa-solid fa-user-nurse"></i> โดย อสม: {item.vhv_name}</span>
+                            </div>
+
                          </div>
                          
                          <div style={{ textAlign: 'center', background: `${item.colorHex}15`, padding: '15px 30px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '160px' }}>
