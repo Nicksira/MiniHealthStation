@@ -1324,30 +1324,31 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
       // 1. ยิงสัญญาณทันทีที่ล็อกอิน
       axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'online' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
       
-      // 2. ยิงซ้ำทุกๆ 60 วินาที เพื่อรักษาสถานะ Online (ถ้าไฟดับ หรือเน็ตหลุด จะถูกเตะออฟไลน์อัตโนมัติใน 3 นาที)
+      // 2. 🚨 ยิงซ้ำทุกๆ 10 วินาที (ปรับให้ถี่ขึ้น เพื่อให้สัมพันธ์กับระบบ 20 วิ ของหลังบ้าน)
       heartbeatInterval = setInterval(() => {
         axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'online' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
-      }, 60000); 
+      }, 10000); 
 
-      // 🚨 3. ดักจับตอนกด "กากบาทปิดโปรแกรม" หรือรีเฟรชหน้าเว็บ ให้เตะเป็นออฟไลน์ทันที
+      // 3. 🚨 ท่าไม้ตาย (sendBeacon): ส่งข้อมูลเฮือกสุดท้ายตอนโดนกากบาทปิดหน้าจอ
       const handleUnload = () => {
-        fetch(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-          body: JSON.stringify({ cid: currentVhv.cid, status: 'offline' }),
-          keepalive: true // 👈 สำคัญมาก! บังคับให้เบราว์เซอร์ยิงคำสั่งให้เสร็จ แม้โปรแกรมจะถูกกากบาทปิดไปแล้ว
-        }).catch(()=>{});
+        const payload = JSON.stringify({ cid: currentVhv.cid, status: 'offline' });
+        const blob = new Blob([payload], { type: 'application/json' });
+        
+        // sendBeacon จะการันตีการส่งข้อมูล แม้แท็บ/โปรแกรมจะปิดตัวไปแล้วก็ตาม
+        navigator.sendBeacon(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, blob);
       };
+      
+      // ผูก Event ทั้ง 2 แบบเพื่อความชัวร์ (บางเบราว์เซอร์ชอบ pagehide มากกว่า)
       window.addEventListener('beforeunload', handleUnload);
+      window.addEventListener('pagehide', handleUnload);
 
       return () => {
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         window.removeEventListener('beforeunload', handleUnload);
+        window.removeEventListener('pagehide', handleUnload);
       };
     }
   }, [currentVhv]);
-
-  const healthAnalysis = analyzeHealth();
 
  return (
     <div className="app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', position: 'fixed', top: 0, left: 0, margin: 0, padding: 0 }}>
