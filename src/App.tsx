@@ -1016,7 +1016,19 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
         setCurrentVhv({ cid: vhvIdInput, name: vhvName });
         setShowVhvLoginModal(false);
         setVhvIdInput('');
-        Swal.fire({ title: 'เข้าสู่ระบบ อสม.', text: `ยินดีต้อนรับ ${vhvName}`, icon: 'success', timer: 2000, showConfirmButton: false });
+        
+        // 🌟 เช็คว่าเป็นเจ้าหน้าที่ (Staff) หรือไม่
+        const staffCids = ['3251000441639', '1259700107058', '1279800022828'];
+        const isStaff = staffCids.includes(vhvIdInput.trim());
+        const roleTitle = isStaff ? 'เจ้าหน้าที่' : 'อสม.';
+
+        Swal.fire({ 
+            title: `เข้าสู่ระบบ${roleTitle}`, 
+            text: `ยินดีต้อนรับ ${roleTitle} ${vhvName}`, 
+            icon: 'success', 
+            timer: 2000, 
+            showConfirmButton: false 
+        });
       } else {
         setVhvLoginError('ไม่พบข้อมูล อสม. ท่านนี้ในระบบ (ลองเช็คเลขอีกครั้ง)');
       }
@@ -1355,6 +1367,8 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     }
   }, [currentVhv]);
 
+  const isStaffLoggedIn = currentVhv && ['3251000441639', '1259700107058', '1279800022828'].includes(currentVhv.cid);
+
  return (
     <div className="app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', position: 'fixed', top: 0, left: 0, margin: 0, padding: 0 }}>
       
@@ -1367,11 +1381,23 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
 
         <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: '15px' }}>
           {currentVhv ? (
-              <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px 25px', borderRadius: '50px', fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)', border: '2px solid #34d399' }}>
-                  {/* 👈 เพิ่ม whiteSpace: 'nowrap' และ minWidth เพื่อล็อคไม่ให้ป้ายโดนบีบจนตกบรรทัด */}
+              <div style={{ 
+                  /* 🎨 ถ้าเป็นเจ้าหน้าที่ เปลี่ยนเป็นสีม่วง-น้ำเงิน (Premium) */
+                  background: isStaffLoggedIn ? 'linear-gradient(135deg, #4f46e5, #3b82f6)' : 'linear-gradient(135deg, #10b981, #059669)', 
+                  color: 'white', padding: '8px 25px', borderRadius: '50px', fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '15px', 
+                  boxShadow: isStaffLoggedIn ? '0 4px 15px rgba(59, 130, 246, 0.4)' : '0 4px 15px rgba(16, 185, 129, 0.4)', 
+                  border: isStaffLoggedIn ? '2px solid #93c5fd' : '2px solid #34d399' 
+              }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
-                    <span style={{ width: '10px', height: '10px', minWidth: '10px', backgroundColor: '#6ee7b7', borderRadius: '50%', display: 'inline-block', animation: 'pulse 1.5s infinite', boxShadow: '0 0 10px rgba(110, 231, 183, 0.8)' }}></span>
-                    <i className="fa-solid fa-user-nurse"></i> อสม: {currentVhv.name}
+                    <span style={{ 
+                        width: '10px', height: '10px', minWidth: '10px', 
+                        backgroundColor: isStaffLoggedIn ? '#bfdbfe' : '#6ee7b7', 
+                        borderRadius: '50%', display: 'inline-block', animation: 'pulse 1.5s infinite', 
+                        boxShadow: isStaffLoggedIn ? '0 0 10px rgba(147, 197, 253, 0.8)' : '0 0 10px rgba(110, 231, 183, 0.8)' 
+                    }}></span>
+                    {/* 👨‍⚕️ ถ้าเป็นเจ้าหน้าที่ เปลี่ยนไอคอนเป็นรูปคุณหมอ */}
+                    <i className={isStaffLoggedIn ? "fa-solid fa-user-doctor" : "fa-solid fa-user-nurse"}></i> 
+                    {isStaffLoggedIn ? 'เจ้าหน้าที่' : 'อสม'}: {currentVhv.name}
                   </span>
                   <button onClick={() => setCurrentVhv(null)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '20px', padding: '5px 15px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', transition: 'transform 0.2s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>ออก</button>
               </div>

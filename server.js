@@ -656,7 +656,7 @@ app.get('/jhcis-api/vhv-stats', checkApiKey, async (req, res) => {
                 v.cid AS vhv_cid, 
                 v.name AS vhv_name,
                 /* 🚨 หั่นเวลาลงเหลือ 15 วินาที! ถ้าปิดโปรแกรมปุ๊บ หรือเน็ตหลุด จะออฟไลน์ทันที */
-                IF(v.last_active >= NOW() - INTERVAL 15 SECOND, 1, 0) AS is_online,
+                IF(v.last_active >= NOW() - INTERVAL 10 SECOND, 1, 0) AS is_online,
                 COUNT(l.id) AS total_patients,
                 SUM(CASE WHEN l.weight > 0 THEN 1 ELSE 0 END) AS weight_recorded,
                 SUM(CASE WHEN l.height > 0 THEN 1 ELSE 0 END) AS height_recorded,
