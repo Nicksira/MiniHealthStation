@@ -1389,11 +1389,12 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                   border: isStaffLoggedIn ? '2px solid #93c5fd' : '2px solid #34d399' 
               }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                    {/* 🟢 บังคับให้เป็นจุดไฟกระพริบสีเขียว Online เสมอ */}
                     <span style={{ 
                         width: '10px', height: '10px', minWidth: '10px', 
-                        backgroundColor: isStaffLoggedIn ? '#bfdbfe' : '#6ee7b7', 
+                        backgroundColor: '#6ee7b7', 
                         borderRadius: '50%', display: 'inline-block', animation: 'pulse 1.5s infinite', 
-                        boxShadow: isStaffLoggedIn ? '0 0 10px rgba(147, 197, 253, 0.8)' : '0 0 10px rgba(110, 231, 183, 0.8)' 
+                        boxShadow: '0 0 10px rgba(110, 231, 183, 0.8)' 
                     }}></span>
                     {/* 👨‍⚕️ ถ้าเป็นเจ้าหน้าที่ เปลี่ยนไอคอนเป็นรูปคุณหมอ */}
                     <i className={isStaffLoggedIn ? "fa-solid fa-user-doctor" : "fa-solid fa-user-nurse"}></i> 
