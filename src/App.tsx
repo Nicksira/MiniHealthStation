@@ -1367,7 +1367,47 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     }
   }, [currentVhv]);
 
+  
+// ==========================================
+  // 🧠 สมองกลประเมินสุขภาพ (AI Health Analysis)
+  // ==========================================
+  const analyzeHealth = () => {
+    let alerts = [];
+    let isEmergency = false;
+    if (vitals.height !== '---' && vitals.weight !== '---') {
+      const h = parseFloat(vitals.height) / 100;
+      const w = parseFloat(vitals.weight);
+      if (h > 0 && w > 0) {
+        const bmi = (w / (h * h)).toFixed(2);
+        if (Number(bmi) >= 30) alerts.push({ icon: 'fa-solid fa-triangle-exclamation', title: `โรคอ้วนระดับ 2 (BMI: ${bmi})`, desc: 'เสี่ยงโรคแทรกซ้อนสูงมาก แนะนำให้พบแพทย์และปรับพฤติกรรมด่วน', color: '#dc2626' });
+        else if (Number(bmi) >= 25) alerts.push({ icon: 'fa-solid fa-circle-exclamation', title: `โรคอ้วนระดับ 1 (BMI: ${bmi})`, desc: 'ควรเริ่มควบคุมอาหารและออกกำลังกาย', color: '#ea580c' });
+        else if (Number(bmi) >= 23) alerts.push({ icon: 'fa-solid fa-bell', title: `น้ำหนักเกิน (BMI: ${bmi})`, desc: 'ควรระวังเรื่องอาหารการกิน', color: '#ca8a04' });
+        else if (Number(bmi) >= 18.5) alerts.push({ icon: 'fa-solid fa-circle-check', title: `น้ำหนักปกติ (BMI: ${bmi})`, desc: 'รักษาสุขภาพได้ดีมากครับ', color: '#16a34a' });
+        else alerts.push({ icon: 'fa-solid fa-circle-info', title: `น้ำหนักต่ำกว่าเกณฑ์ (BMI: ${bmi})`, desc: 'ควรทานอาหารที่มีประโยชน์เพิ่มขึ้น', color: '#2563eb' });
+      }
+    }
+    if (vitals.sysDia !== '---') {
+      const [sys, dia] = vitals.sysDia.split('/').map(Number);
+      if (sys >= 180 || dia >= 120) {
+        isEmergency = true;
+        alerts.push({ icon: 'fa-solid fa-heart-crack', title: 'ความดันโลหิตสูงวิกฤต!', desc: 'อันตราย! เสี่ยงหลอดเลือดสมองแตก กรุณานั่งพัก ติดต่อเจ้าหน้าที่ทันที หรือโทร 1669', color: '#dc2626', isCrit: true });
+      } else if (sys >= 140 || dia >= 90) {
+        alerts.push({ icon: 'fa-solid fa-heart-circle-exclamation', title: 'ความดันโลหิตสูง', desc: 'ควรพบแพทย์เพื่อประเมินอาการอย่างละเอียด', color: '#ea580c' });
+      } else if (sys <= 90 || dia <= 60) {
+        alerts.push({ icon: 'fa-solid fa-heart-circle-minus', title: 'ความดันโลหิตต่ำ', desc: 'อาจมีอาการหน้ามืด วิงเวียน ควรพักผ่อนและดื่มน้ำให้เพียงพอ', color: '#2563eb' });
+      } else {
+        alerts.push({ icon: 'fa-solid fa-heart-circle-check', title: 'ความดันโลหิตปกติ', desc: 'อยู่ในเกณฑ์ที่ดีครับ', color: '#16a34a' });
+      }
+    }
+    return { alerts, isEmergency };
+  };
+
+  const healthAnalysis = analyzeHealth();
+
+  // 🌟 ตัวแปรเช็คสิทธิ์ (Role-based) สำหรับแยกระหว่าง เจ้าหน้าที่ และ อสม.
   const isStaffLoggedIn = currentVhv && ['3251000441639', '1259700107058', '1279800022828'].includes(currentVhv.cid);
+
+  // 👇 โค้ดเดิมของคุณสิรภพ 👇
 
  return (
     <div className="app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', position: 'fixed', top: 0, left: 0, margin: 0, padding: 0 }}>
