@@ -1383,9 +1383,9 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
         <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: '15px' }}>
           {currentVhv ? (
               <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px 25px', borderRadius: '50px', fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)', border: '2px solid #34d399' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {/* 🟢 จุดไฟกระพริบ Online สีเขียวสว่าง */}
-                    <span style={{ width: '10px', height: '10px', backgroundColor: '#6ee7b7', borderRadius: '50%', display: 'inline-block', animation: 'pulse 1.5s infinite', boxShadow: '0 0 10px rgba(110, 231, 183, 0.8)' }}></span>
+                  {/* 👈 เพิ่ม whiteSpace: 'nowrap' และ minWidth เพื่อล็อคไม่ให้ป้ายโดนบีบจนตกบรรทัด */}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                    <span style={{ width: '10px', height: '10px', minWidth: '10px', backgroundColor: '#6ee7b7', borderRadius: '50%', display: 'inline-block', animation: 'pulse 1.5s infinite', boxShadow: '0 0 10px rgba(110, 231, 183, 0.8)' }}></span>
                     <i className="fa-solid fa-user-nurse"></i> อสม: {currentVhv.name}
                   </span>
                   <button onClick={() => setCurrentVhv(null)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '20px', padding: '5px 15px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', transition: 'transform 0.2s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>ออก</button>
@@ -1812,18 +1812,24 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
           
       ) : !isLoggedIn ? (
         
-        <main className="home-screen" style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {/* 👈 เพิ่ม minHeight: 0 ให้หน้าจอหลักอนุญาตให้หดตัวได้ */}
+        <main className="home-screen" style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', minHeight: 0 }}>
           <video key={customVideo} autoPlay loop playsInline style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0, opacity: 0.4 }}><source src={customVideo} type="video/mp4" /></video>
           
-          <div onClick={handleManualRead} style={{ display: 'flex', justifyContent: 'center', margin: '30px 0', cursor: 'pointer', position: 'relative', zIndex: 1 }}>
-            <img src="/nick.png" alt="กรุณาสอดบัตรประชาชน" style={{ maxWidth: '600px', transition: 'transform 0.2s', filter: 'drop-shadow(0 15px 20px rgba(0,0,0,0.2))' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'} />
+          {/* 👈 ปรับ Margin เป็น 2vh เพื่อให้ระยะห่างยืดหยุ่นตามความสูงของจอภาพ */}
+          <div onClick={handleManualRead} style={{ display: 'flex', justifyContent: 'center', margin: '2vh 0', cursor: 'pointer', position: 'relative', zIndex: 1 }}>
+            
+            {/* 👈 พระเอกอยู่ตรงนี้: ใส่ maxHeight: '40vh' ให้รูปภาพไม่สูงเกินไปจนดันปุ่มตกขอบจอ */}
+            <img src="/nick.png" alt="กรุณาสอดบัตรประชาชน" style={{ maxWidth: '90%', maxHeight: '40vh', objectFit: 'contain', transition: 'transform 0.2s', filter: 'drop-shadow(0 15px 20px rgba(0,0,0,0.2))' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'} />
+          
           </div>
           
           <div className="instruction-text" style={{ position: 'relative', zIndex: 1, textShadow: '0 2px 4px rgba(255,255,255,0.9)' }}>
             {loading ? 'กำลังดึงข้อมูลและรูปถ่าย...' : 'กรุณาสอดบัตรประชาชน เพื่อเข้ารับบริการ'}
           </div>
           
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', position: 'relative', zIndex: 1, marginTop: '20px', width: '100%' }}>
+          {/* 👈 ปรับ marginTop เป็น 2vh เพื่อให้ระยะห่างยืดหยุ่น */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', position: 'relative', zIndex: 1, marginTop: '2vh', width: '100%' }}>
             
             <button 
               onClick={() => { 
