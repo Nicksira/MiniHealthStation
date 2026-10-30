@@ -998,14 +998,40 @@ const NUTRITION_DICT: any = {
       return;
     }
 
-    // 🚨 ตรวจสอบว่าเป็นผู้ใหญ่ (อายุเกิน 60 เดือน) ถึงจะบังคับตรวจบุหรี่/สุรา
-    const isAdult = patient?.age_months === undefined || patient?.age_months > 60;
+    const ageMonths = Number(patient?.age_months);
+    const isAdult = isNaN(ageMonths) || ageMonths > 60;
+
+    // 🚨 1. ตรวจสอบข้อมูลสัญญาณชีพที่บังคับกรอก
+    const missingVitals = [];
     
+    // บังคับสำหรับทุกคน (น้ำหนัก, ส่วนสูง)
+    if (vitals.weight === '---' || vitals.weight === '' || parseFloat(vitals.weight) <= 0) missingVitals.push('น้ำหนัก');
+    if (vitals.height === '---' || vitals.height === '' || parseFloat(vitals.height) <= 0) missingVitals.push('ส่วนสูง');
+    
+    // บังคับเพิ่มเติมสำหรับผู้ใหญ่ (รอบเอว, ความดัน, ชีพจร)
+    if (isAdult) {
+      if (vitals.waist === '---' || vitals.waist === '' || parseFloat(vitals.waist) <= 0) missingVitals.push('รอบเอว');
+      if (vitals.sysDia === '---' || vitals.sysDia === '') missingVitals.push('ความดันโลหิต');
+      if (vitals.pulse === '---' || vitals.pulse === '' || parseInt(vitals.pulse) <= 0) missingVitals.push('ชีพจร');
+    }
+
+    // ถ้ามีช่องที่ยังไม่ได้กรอก ให้เด้งแจ้งเตือนบอกว่าขาดอะไรบ้าง
+    if (missingVitals.length > 0) {
+      Swal.fire({
+        title: 'ข้อมูลสัญญาณชีพไม่ครบถ้วน!',
+        html: `กรุณาวัดหรือกรอกข้อมูลต่อไปนี้ให้ครบก่อนบันทึกค่ะ:<br/><br/><strong style="color:#ef4444; font-size: 18px;">${missingVitals.join(' / ')}</strong>`,
+        icon: 'warning',
+        confirmButtonText: 'รับทราบ',
+        confirmButtonColor: '#f59e0b'
+      });
+      return; // หยุดการทำงาน ไม่ให้เด้งหน้าต่างยืนยัน
+    }
+
+    // 🚨 2. ตรวจสอบพฤติกรรมเสี่ยง (บุหรี่/สุรา) สำหรับผู้ใหญ่
     if (isAdult) {
       if (!smokeStatus || !alcoholStatus) {
-        // เด้ง Popup แจ้งเตือนถ้ายาวังไม่ได้เลือก
         Swal.fire({
-          title: 'ข้อมูลไม่ครบถ้วน!',
+          title: 'ข้อมูลพฤติกรรมไม่ครบถ้วน!',
           text: 'กรุณาระบุ "ประวัติสูบบุหรี่" และ "ประวัติดื่มสุรา" ให้ครบถ้วนก่อนบันทึกข้อมูล',
           icon: 'warning',
           confirmButtonText: 'รับทราบ',
@@ -1015,6 +1041,7 @@ const NUTRITION_DICT: any = {
       }
     }
 
+    // ถ้าข้อมูลครบถ้วนทั้งหมด ถึงจะแสดงหน้าต่างยืนยันการบันทึก
     setShowConfirmQueueModal(true);
   };
 
