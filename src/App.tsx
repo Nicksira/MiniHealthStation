@@ -54,10 +54,38 @@ function App() {
   const [smokeStatus, setSmokeStatus] = useState<string>('');
   const [alcoholStatus, setAlcoholStatus] = useState<string>('');
   const [alcoholAdvice, setAlcoholAdvice] = useState<string>(''); // 👈 เพิ่ม state เก็บคำแนะนำสุรา
-  // 🩺 State ย่อยสำหรับบุหรี่
+ // 🩺 State ย่อยสำหรับบุหรี่
   const [smokeAmount, setSmokeAmount] = useState<string>('1B509'); // ค่าเริ่มต้นคือ 1B509 (สูบแต่ไม่ระบุมวน)
   const [smokeWake, setSmokeWake] = useState<string>(''); // 👈 ตัวแปรใหม่สำหรับข้อ 2
-  const [smokeAdvice, setSmokeAdvice] = useState<string>('');
+  const [smokeAdvice, setSmokeAdvice] = useState<string>(''); // 👈 🚨 เติมบรรทัดนี้กลับคืนมาตรงนี้ครับ
+  const [sugarFasting, setSugarFasting] = useState<string>(''); // 👈 State เก็บสถานะเจาะน้ำตาล
+
+  // 👈 ฟังก์ชันเด้ง Popup เลือกสถานะน้ำตาล
+  const handleSugarClick = async (inputElement: HTMLInputElement | null = null) => {
+    if (sugarFasting) return; // ถ้าเคยเลือกแล้ว ไม่ต้องเด้งอีก
+    
+    const { value: fastingOption } = await Swal.fire({
+      title: 'ประเมินก่อนเจาะน้ำตาล',
+      html: '<p style="color:#64748b;">กรุณาระบุสภาวะของคนไข้ก่อนเจาะเลือดค่ะ</p>',
+      icon: 'question',
+      input: 'radio',
+      inputOptions: {
+        'งดน้ำ-อาหาร': 'งดน้ำ - อาหารฯ',
+        'ไม่งดน้ำ-อาหาร': 'ไม่งดน้ำ - อาหารฯ'
+      },
+      inputValidator: (value) => {
+        if (!value) return 'กรุณาเลือกตัวเลือกก่อนค่ะ!'
+      },
+      confirmButtonText: 'ตกลง',
+      confirmButtonColor: '#3b82f6',
+      allowOutsideClick: false
+    });
+
+    if (fastingOption) {
+      setSugarFasting(fastingOption);
+      if (inputElement) setTimeout(() => inputElement.focus(), 100); // พิมพ์ค่าต่อได้เลย
+    }
+  };
 
   // 🦸‍♂️ State สำหรับดูรายละเอียดผลงาน อสม.
   const [showVhvDetailsModal, setShowVhvDetailsModal] = useState(false);
@@ -78,6 +106,10 @@ function App() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
   const [bpData, setBpData] = useState<any[]>([]);
+
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [selectedBpRecord, setSelectedBpRecord] = useState<any>(null);
+  const [followUpNote, setFollowUpNote] = useState('');
 
   // ฟังก์ชันดึงข้อมูลความดัน
   const fetchBPData = async (dateStr: string) => {
@@ -447,8 +479,8 @@ const NUTRITION_DICT: any = {
       setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---', headCircum: '---' });
       setAiResponse('');
       
-      // 🧹 เพิ่มโค้ดบรรทัดนี้: ล้างค่าประวัติบุหรี่และสุราทุกครั้งที่เสียบบัตรใหม่
-      setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice('');
+      // แก้เป็นแบบนี้ทั้ง 3 จุดเลยครับ
+setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice(''); setSugarFasting('');
       // ... โค้ดเดิมข้างล่าง ...
 
       try {
@@ -498,8 +530,8 @@ const NUTRITION_DICT: any = {
         setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---', headCircum: '---' });
         setAiResponse('');
         
-        // 🧹 เพิ่มโค้ดบรรทัดนี้: ล้างค่าประวัติบุหรี่และสุราทุกครั้งที่พิมพ์เลขใหม่
-        setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice('');
+        // แก้เป็นแบบนี้ทั้ง 3 จุดเลยครับ
+setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice(''); setSugarFasting('');
         
 
         setPatient({ ...response.data.data, cid: manualIdInput });
@@ -528,8 +560,8 @@ const NUTRITION_DICT: any = {
     setIsTestingMode(false);
     setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---', headCircum: '---' });
     
-    // 🧹 เพิ่มโค้ดบรรทัดนี้: ล้างค่าตอนออกจากระบบ
-    setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice('');
+    // แก้เป็นแบบนี้ทั้ง 3 จุดเลยครับ
+setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice(''); setSugarFasting('');
   };
 
   const handleManualRead = async () => {
@@ -1013,6 +1045,12 @@ const NUTRITION_DICT: any = {
       if (vitals.waist === '---' || vitals.waist === '' || parseFloat(vitals.waist) <= 0) missingVitals.push('รอบเอว');
       if (vitals.sysDia === '---' || vitals.sysDia === '') missingVitals.push('ความดันโลหิต');
       if (vitals.pulse === '---' || vitals.pulse === '' || parseInt(vitals.pulse) <= 0) missingVitals.push('ชีพจร');
+      
+      // 🚨 ตรวจสอบว่าถ้าใส่น้ำตาลมาแล้ว ต้องเลือกสถานะงดอาหารด้วย
+      const hasSugarValue = vitals.sugar !== '---' && vitals.sugar !== '' && parseFloat(vitals.sugar) > 0;
+      if (hasSugarValue && !sugarFasting) {
+        missingVitals.push('สภาวะก่อนเจาะน้ำตาล (คลิกที่ช่องน้ำตาล)');
+      }
     }
 
     // ถ้ามีช่องที่ยังไม่ได้กรอก ให้เด้งแจ้งเตือนบอกว่าขาดอะไรบ้าง
@@ -1072,6 +1110,7 @@ const NUTRITION_DICT: any = {
       smokeWake: smokeWake,       // 👈 เพิ่มบรรทัดนี้
       smokeAdvice: smokeAdvice,   // 👈 เพิ่มบรรทัดนี้
       alcoholAdvice: alcoholAdvice, // 👈 เพิ่มบรรทัดนี้
+      sugarFastingStatus: sugarFasting, // 👈 เพิ่มบรรทัดนี้ลงไป
       breastCancerScreening: needBreastCancerScreening, // 👈 ส่งสถานะนี้ไปหลังบ้านตรงๆ เลย
       weight: vitals.weight === '' || vitals.weight === '---' ? 0 : parseFloat(vitals.weight),
       height: vitals.height === '' || vitals.height === '---' ? 0 : parseFloat(vitals.height),
@@ -1670,48 +1709,41 @@ const NUTRITION_DICT: any = {
                   {bpData.length > 0 ? bpData.map((item, idx) => (
                      <div 
                         key={idx} 
+                        onClick={() => {
+                          setSelectedBpRecord(item);
+                          setFollowUpNote(item.follow_up_note || '');
+                          setShowFollowUpModal(true);
+                        }}
                         style={{ 
-                            display: 'flex', 
-                            alignItems: 'stretch', 
-                            justifyContent: 'space-between', 
-                            background: 'white', 
-                            borderRadius: '12px', 
-                            border: `1px solid #e2e8f0`, /* 👈 แก้ตรงนี้: เปลี่ยนเป็นเส้นขอบบางๆ เท่ากันทุกด้าน */
-                            boxShadow: '0 4px 6px rgba(0,0,0,0.05)', 
-                            transition: 'transform 0.2s',
-                            overflow: 'hidden' 
+                            display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', 
+                            background: 'white', borderRadius: '12px', border: `1px solid ${item.follow_up_note ? '#10b981' : '#e2e8f0'}`, 
+                            boxShadow: item.follow_up_note ? '0 4px 6px rgba(16,185,129,0.1)' : '0 4px 6px rgba(0,0,0,0.05)', 
+                            transition: 'transform 0.2s', overflow: 'hidden', cursor: 'pointer' /* 👈 สั่งให้เมาส์เปลี่ยนเป็นรูปมือ */
                         }} 
-                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.01)'} 
+                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'} 
                         onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
                      >
-                         {/* 🔹 ส่วนซ้าย: ข้อมูลคนไข้และ อสม. (พื้นหลังขาว) */}
                          <div style={{ padding: '15px 25px', flex: 1 }}>
                             <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>
                               <i className="fa-regular fa-user" style={{ color: item.colorHex, marginRight: '8px' }}></i>
                               {item.patient_name}
                             </div>
-                            <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px', display: 'flex', gap: '15px' }}>
+                            <div style={{ fontSize: '14px', color: '#64748b', marginTop: '8px', display: 'flex', gap: '15px', alignItems: 'center' }}>
                                 <span><i className="fa-regular fa-clock"></i> เวลา {item.record_time} น.</span>
                                 <span><i className="fa-solid fa-user-nurse"></i> โดย อสม: {item.vhv_name}</span>
+                                
+                                {/* 👈 โชว์ติ๊กถูกสีเขียว ถ้ามีการกรอกโน้ตติดตามแล้ว */}
+                                {item.follow_up_note && (
+                                  <span style={{ color: '#10b981', fontWeight: 'bold', background: '#d1fae5', padding: '2px 8px', borderRadius: '20px' }}>
+                                    <i className="fa-solid fa-circle-check"></i> ติดตามแล้ว
+                                  </span>
+                                )}
                             </div>
                          </div>
                          
-                         {/* 🔹 ส่วนขวา: ค่าความดัน (พื้นหลังสีจางๆ ยืดเต็มกรอบ) */}
-                         <div style={{ 
-                             textAlign: 'center', 
-                             background: `${item.colorHex}15`, 
-                             padding: '15px 30px', 
-                             display: 'flex', 
-                             flexDirection: 'column', 
-                             justifyContent: 'center',
-                             minWidth: '160px' 
-                         }}>
-                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: item.colorHex, letterSpacing: '1px', lineHeight: '1.2' }}>
-                              {item.sys_dia}
-                            </div>
-                            <div style={{ fontSize: '14px', color: item.colorHex, fontWeight: 'bold', marginTop: '2px' }}>
-                              {item.levelName}
-                            </div>
+                         <div style={{ textAlign: 'center', background: `${item.colorHex}15`, padding: '15px 30px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '160px' }}>
+                            <div style={{ fontSize: '28px', fontWeight: 'bold', color: item.colorHex, letterSpacing: '1px', lineHeight: '1.2' }}>{item.sys_dia}</div>
+                            <div style={{ fontSize: '14px', color: item.colorHex, fontWeight: 'bold', marginTop: '2px' }}>{item.levelName}</div>
                          </div>
                      </div>
                   )) : (
@@ -1970,12 +2002,26 @@ const NUTRITION_DICT: any = {
                   { id: 'sugar', label: 'น้ำตาลในเลือด', unit: 'มิลลิกรัม/เดซิลิตร', val: vitals.sugar },
                 ].map((item, idx) => (
                   <div className="vital-cell" key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                    <div className="vital-label">{item.label}<br/><small>{item.unit}</small></div>
+                    <div className="vital-label" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      {item.label}
+                      <small>{item.unit}</small>
+                      {/* 👈 เพิ่มตัวหนังสือแจ้งเตือนสถานะน้ำตาลใต้ชื่อช่อง */}
+                      {item.id === 'sugar' && sugarFasting && (
+                         <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', marginTop: '2px' }}>({sugarFasting})</div>
+                      )}
+                    </div>
                     <div className="vital-value-box" style={{ padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <input
                         type="text" value={item.val === '---' ? '' : item.val} 
                         onChange={(e) => handleVitalChange(item.id, e.target.value)}
                         onBlur={(e) => { if (e.target.value.trim() === '') handleVitalChange(item.id, '---'); }}
+                        onClick={(e) => {
+                          // 🚨 ดักคลิก: ถ้าเป็นช่องน้ำตาลและยังไม่ระบุสถานะ ให้เด้ง Popup ทันที
+                          if (item.id === 'sugar' && !sugarFasting) {
+                            e.currentTarget.blur(); // เอาเคอร์เซอร์ออกกันคีย์บอร์ดบัง
+                            handleSugarClick(e.currentTarget);
+                          }
+                        }}
                         placeholder="---"
                         style={{ width: '100%', height: '100%', background: 'transparent', border: 'none', textAlign: 'center', fontSize: '26px', fontWeight: 'bold', color: '#1f2937', outline: 'none' }}
                       />
@@ -2261,6 +2307,56 @@ const NUTRITION_DICT: any = {
             {!notifyModal.isSuccess && (
               <button onClick={() => setNotifyModal(prev => ({ ...prev, show: false }))} style={{ width: '100%', padding: '15px', background: '#EF4444', color: 'white', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(239, 68, 68, 0.3)' }}>รับทราบและปิดหน้าต่าง</button>
             )}
+          </div>
+        </div>
+      )}
+
+      {showFollowUpModal && selectedBpRecord && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 5000, backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'white', borderRadius: '20px', padding: '30px', width: '90%', maxWidth: '500px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', animation: 'fadeIn 0.2s' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '15px', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, color: selectedBpRecord.colorHex, fontSize: '22px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <i className="fa-solid fa-notes-medical"></i> ติดตามอาการ (Follow-up)
+              </h3>
+              <button onClick={() => setShowFollowUpModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', color: '#94a3b8', cursor: 'pointer' }}><i className="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b', marginBottom: '5px' }}>คุณ{selectedBpRecord.patient_name}</div>
+              <div style={{ color: '#64748b', fontSize: '14px' }}>ความดันโลหิต: <strong style={{ color: selectedBpRecord.colorHex }}>{selectedBpRecord.sys_dia}</strong> ({selectedBpRecord.levelName})</div>
+              <div style={{ color: '#64748b', fontSize: '14px', marginTop: '5px' }}>เวลาวัด: {selectedBpRecord.record_time} น. | อสม: {selectedBpRecord.vhv_name}</div>
+            </div>
+
+            <label style={{ fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '10px' }}>บันทึกผลการติดตาม / การจัดการ:</label>
+            <textarea 
+              autoFocus
+              rows={4}
+              placeholder="เช่น ให้นั่งพัก 15 นาทีแล้ววัดใหม่, จ่ายยาลดความดัน, ส่งต่อพบแพทย์..."
+              value={followUpNote}
+              onChange={(e) => setFollowUpNote(e.target.value)}
+              style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '2px solid #cbd5e1', outline: 'none', fontSize: '16px', resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+            ></textarea>
+
+            <div style={{ display: 'flex', gap: '15px', width: '100%', marginTop: '20px' }}>
+              <button onClick={() => setShowFollowUpModal(false)} style={{ flex: 1, padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#f1f5f9', color: '#64748b', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }}>ยกเลิก</button>
+              <button 
+                onClick={async () => {
+                  try {
+                    await axios.post(`${API_BASE_URL}/jhcis-api/bp-followup`, { log_id: selectedBpRecord.log_id, note: followUpNote }, { headers: { 'x-api-key': API_KEY } });
+                    setShowFollowUpModal(false);
+                    fetchBPData(bpDate); // โหลดข้อมูลกระดานใหม่เพื่อแสดงติ๊กถูกสีเขียว
+                    Swal.fire({ title: 'บันทึกสำเร็จ!', text: 'อัปเดตข้อมูลการติดตามอาการเรียบร้อย', icon: 'success', timer: 1500, showConfirmButton: false });
+                  } catch (e) {
+                    alert('บันทึกไม่สำเร็จ กรุณาลองใหม่');
+                  }
+                }} 
+                style={{ flex: 1, padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#10b981', color: 'white', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}
+              >
+                <i className="fa-solid fa-save"></i> บันทึกข้อมูล
+              </button>
+            </div>
+
           </div>
         </div>
       )}

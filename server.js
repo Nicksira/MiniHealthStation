@@ -74,7 +74,9 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
         const temp = parseFloat(data.temp) || 0;
         const waist = parseFloat(data.waist) || 0;
         const sugar = parseFloat(data.sugar) || 0;
-        const vitalCheckText = sugar > 0 ? `DTX: ${sugar} mg/dL` : '';
+        // 👈 ดึงสถานะงดอาหารมาประกอบร่างข้อความ (ถ้ามี)
+        const fastingText = data.sugarFastingStatus ? ` (${data.sugarFastingStatus})` : '';
+        const vitalCheckText = sugar > 0 ? `DTX: ${sugar} mg/dL${fastingText}` : '';
         
         let autoSymptoms = '';
         let autoSymptomsco = '';
@@ -233,6 +235,7 @@ app.get('/jhcis-api/patient/:cid', checkApiKey, async (req, res) => {
             
             try {
                 const sqlLog = `INSERT INTO kiosk_usage_log (cid, sex, search_date) VALUES (?, ?, NOW())`;
+                // 🚨 บรรทัดล่างนี้ขาดคำว่า await ทำให้ Database ล่มครับ
                 connection.execute(sqlLog, [req.params.cid, patient.sex || null]).catch(()=> {});
             } catch (logErr) { }
 
@@ -686,23 +689,30 @@ app.get('/jhcis-api/vhv-logs/:vhv_cid', checkApiKey, async (req, res) => {
 // 🎯 API 9: ระบบเฝ้าระวังความดันโลหิตสูง (BP Monitor Real-time)
 // ==========================================
 app.get('/jhcis-api/bp-monitor', checkApiKey, async (req, res) => {
-    const { date } = req.query; // รับค่าวันที่ (YYYY-MM-DD)
+    const { date } = req.query; 
     if (!date) return res.status(400).json({ success: false, message: 'กรุณาระบุวันที่' });
 
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
         
-        // 1. ดึงข้อมูลและแยกค่า sys/dia ออกจากกันเพื่อใช้คำนวณ
+        // 🚨 ทริคพิเศษ: ตรวจสอบและสร้างคอลัมน์ follow_up_note อัตโนมัติ (ถ้ายังไม่มี)
+        try {
+            await connection.execute('ALTER TABLE kiosk_usage_log ADD COLUMN follow_up_note TEXT DEFAULT NULL');
+        } catch (e) { /* ถ้าคอลัมน์มีอยู่แล้วจะข้ามไป */ }
+
+        // 1. ดึงข้อมูล (เพิ่ม l.id และ l.follow_up_note)
         const sql = `
             SELECT 
+                l.id as log_id,
                 l.cid as patient_cid,
                 COALESCE(CONCAT(p.fname, ' ', p.lname), 'ไม่ทราบชื่อ') as patient_name,
                 l.sys_dia,
                 CAST(SUBSTRING_INDEX(l.sys_dia, '/', 1) AS UNSIGNED) as sys,
                 CAST(SUBSTRING_INDEX(l.sys_dia, '/', -1) AS UNSIGNED) as dia,
                 DATE_FORMAT(l.search_date, '%H:%i') as record_time,
-                COALESCE(v.name, 'ไม่ระบุ') as vhv_name
+                COALESCE(v.name, 'ไม่ระบุ') as vhv_name,
+                l.follow_up_note
             FROM kiosk_usage_log l
             LEFT JOIN person p ON CONVERT(REPLACE(TRIM(p.idcard), '-', '') USING utf8) = CONVERT(REPLACE(TRIM(l.cid), '-', '') USING utf8)
             LEFT JOIN kiosk_vhv v ON l.vhv_cid = v.cid
@@ -714,26 +724,18 @@ app.get('/jhcis-api/bp-monitor', checkApiKey, async (req, res) => {
         `;
         const [rows] = await connection.execute(sql, [date]);
 
-        // 2. จัดระดับความรุนแรงเป็น 3 สี (แดง, ส้ม, เหลือง)
         const processedRows = rows.map(row => {
             const sys = row.sys;
             const dia = row.dia;
-            let level = 0; 
-            let colorHex = '';
-            let levelName = '';
+            let level = 0; let colorHex = ''; let levelName = '';
 
-            if (sys >= 180 || dia >= 110) {
-                level = 3; colorHex = '#dc2626'; levelName = 'วิกฤต (แดง)';
-            } else if (sys >= 160 || dia >= 100) {
-                level = 2; colorHex = '#ea580c'; levelName = 'อันตราย (ส้ม)';
-            } else if (sys >= 140 || dia >= 90) {
-                level = 1; colorHex = '#eab308'; levelName = 'เฝ้าระวัง (เหลือง)';
-            }
+            if (sys >= 180 || dia >= 110) { level = 3; colorHex = '#dc2626'; levelName = 'วิกฤต (แดง)'; }
+            else if (sys >= 160 || dia >= 100) { level = 2; colorHex = '#ea580c'; levelName = 'อันตราย (ส้ม)'; }
+            else if (sys >= 140 || dia >= 90) { level = 1; colorHex = '#eab308'; levelName = 'เฝ้าระวัง (เหลือง)'; }
 
             return { ...row, level, colorHex, levelName };
         });
 
-        // 3. เรียงลำดับความรุนแรงจาก แดง -> ส้ม -> เหลือง (ถ้าสีเดียวกันให้เรียงตามเวลาล่าสุด)
         processedRows.sort((a, b) => {
             if (b.level !== a.level) return b.level - a.level;
             return b.record_time.localeCompare(a.record_time); 
@@ -741,7 +743,25 @@ app.get('/jhcis-api/bp-monitor', checkApiKey, async (req, res) => {
 
         res.status(200).json({ success: true, data: processedRows });
     } catch (error) {
-        console.error('BP Monitor Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// ==========================================
+// 🎯 API 10: บันทึกการติดตามอาการความดัน (Follow-up Note)
+// ==========================================
+app.post('/jhcis-api/bp-followup', checkApiKey, async (req, res) => {
+    const { log_id, note } = req.body;
+    if (!log_id) return res.status(400).json({ success: false, message: 'ไม่พบ ID ของบันทึก' });
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        await connection.execute('UPDATE kiosk_usage_log SET follow_up_note = ? WHERE id = ?', [note, log_id]);
+        res.status(200).json({ success: true, message: 'บันทึกการติดตามสำเร็จ' });
+    } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     } finally {
         if (connection) await connection.end();
