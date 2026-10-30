@@ -618,27 +618,24 @@ app.post('/jhcis-api/vhv-login', checkApiKey, async (req, res) => {
 });
 
 // ==========================================
-// 📡 API 11: ระบบ Heartbeat อัปเดตสถานะ Online ของ อสม.
+// 📡 API 11: ระบบ Heartbeat (รองรับ sendBeacon และแก้อาการหลุด)
 // ==========================================
-app.post('/jhcis-api/vhv-heartbeat', checkApiKey, async (req, res) => {
-    const { cid, status } = req.body;
+app.post('/jhcis-api/vhv-heartbeat', async (req, res) => {
+    const { cid, status, apiKey } = req.body;
+    if (apiKey !== API_KEY) return res.status(401).json({ success: false, message: 'Unauthorized' });
     if (!cid) return res.status(400).json({ success: false });
 
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        
-        // 🚨 ออโต้สร้างคอลัมน์ last_active ถ้ายังไม่มีในฐานข้อมูล
-        try {
-            await connection.execute('ALTER TABLE kiosk_vhv ADD COLUMN last_active DATETIME DEFAULT NULL');
-        } catch (e) { /* ข้ามไปถ้ามีคอลัมน์นี้อยู่แล้ว */ }
+        try { await connection.execute('ALTER TABLE kiosk_vhv ADD COLUMN last_active DATETIME DEFAULT NULL'); } catch (e) {}
 
         if (status === 'online') {
-            await connection.execute('UPDATE kiosk_vhv SET last_active = NOW() WHERE cid = ?', [cid]);
+            // 🚨 ใช้ TRIM() ป้องกันกรณีฐานข้อมูลมีช่องว่างซ่อนอยู่
+            await connection.execute('UPDATE kiosk_vhv SET last_active = NOW() WHERE TRIM(cid) = TRIM(?)', [cid]);
         } else if (status === 'offline') {
-            await connection.execute('UPDATE kiosk_vhv SET last_active = NULL WHERE cid = ?', [cid]);
+            await connection.execute('UPDATE kiosk_vhv SET last_active = NULL WHERE TRIM(cid) = TRIM(?)', [cid]);
         }
-        
         res.status(200).json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false });
@@ -648,7 +645,7 @@ app.post('/jhcis-api/vhv-heartbeat', checkApiKey, async (req, res) => {
 });
 
 // ==========================================
-// 📊 API: สถิติผลงาน อสม. (อัปเกรด ดึงสถานะ Online)
+// 📊 API: สถิติผลงาน อสม. (อัปเกรด ดึงสถานะ Online แบบเสถียร)
 // ==========================================
 app.get('/jhcis-api/vhv-stats', checkApiKey, async (req, res) => {
     let connection;
@@ -658,8 +655,8 @@ app.get('/jhcis-api/vhv-stats', checkApiKey, async (req, res) => {
             SELECT 
                 v.cid AS vhv_cid, 
                 v.name AS vhv_name,
-                /* 👈 คำนวณสถานะ Online: ถ้ามีการอัปเดตใน 3 นาทีที่ผ่านมา ถือว่ากำลัง Online */
-                IF(v.last_active >= NOW() - INTERVAL 3 MINUTE, 1, 0) AS is_online,
+                /* 🚨 ปรับเป็น 2 MINUTE เพื่อป้องกัน Browser แอบอู้ตอนพักหน้าจอ */
+                IF(v.last_active >= NOW() - INTERVAL 2 MINUTE, 1, 0) AS is_online,
                 COUNT(l.id) AS total_patients,
                 SUM(CASE WHEN l.weight > 0 THEN 1 ELSE 0 END) AS weight_recorded,
                 SUM(CASE WHEN l.height > 0 THEN 1 ELSE 0 END) AS height_recorded,
@@ -676,7 +673,6 @@ app.get('/jhcis-api/vhv-stats', checkApiKey, async (req, res) => {
         const [rows] = await connection.execute(sql);
         res.status(200).json({ success: true, data: rows });
     } catch (error) {
-        console.error("[Stats API] 🚨 Error:", error.message);
         res.status(500).json({ success: false, message: error.message });
     } finally {
         if (connection) await connection.end();

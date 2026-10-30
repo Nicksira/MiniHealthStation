@@ -1268,19 +1268,18 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
   }, []);
 
   // ==========================================
-  // 🔄 ระบบ Auto-Refresh สำหรับหน้าผลงาน อสม. (Real-time Online Status)
+  // 🔄 ระบบ Auto-Refresh สำหรับหน้าผลงาน อสม. (Real-time 100%)
   // ==========================================
   useEffect(() => {
     let vhvInterval: NodeJS.Timeout;
     
-    // จะทำงานเฉพาะตอนที่ผู้ดูแลระบบเปิดแท็บ 'vhv' ดูสถิติอยู่
     if (showSettings && adminTab === 'vhv') {
-      vhvInterval = setInterval(async () => {
-        try {
-          const res = await axios.get(`${API_BASE_URL}/jhcis-api/vhv-stats`, { headers: { 'x-api-key': API_KEY } });
-          if(res.data.success) setVhvStatsData(res.data.data);
-        } catch(e) {}
-      }, 5000); // 👈 แอบไปดึงข้อมูลใหม่มาอัปเดตตารางทุกๆ 5 วินาที
+      // แอบดึงข้อมูลใหม่ทุกๆ 3 วินาที
+      vhvInterval = setInterval(() => {
+        axios.get(`${API_BASE_URL}/jhcis-api/vhv-stats`, { headers: { 'x-api-key': API_KEY } })
+          .then(res => { if(res.data.success) setVhvStatsData(res.data.data); })
+          .catch(()=>{});
+      }, 3000); 
     }
     
     return () => {
@@ -1315,30 +1314,33 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
   }, [isLoggedIn]);
 
   // ==========================================
-  // 💓 ระบบส่งสัญญาณชีพจร (Heartbeat) อัปเดตสถานะ Online ของ อสม.
+  // 💓 ระบบส่งสัญญาณชีพจร (Heartbeat) อัปเดตสถานะ Online แบบเสถียร 100%
   // ==========================================
   useEffect(() => {
     let heartbeatInterval: NodeJS.Timeout;
     
     if (currentVhv) {
-      // 1. ยิงสัญญาณทันทีที่ล็อกอิน
-      axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'online' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
+      // 1. ฟังก์ชันส่งข้อมูล (ยิง API Key ไปใน Body เพื่อให้ sendBeacon ใช้ได้)
+      const sendHeartbeat = (status: string) => {
+        axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { 
+          cid: currentVhv.cid, status: status, apiKey: API_KEY 
+        }).catch(()=>{});
+      };
+
+      sendHeartbeat('online'); // ยิงทันทีที่ล็อกอิน
       
-      // 2. 🚨 ยิงซ้ำทุกๆ 10 วินาที (ปรับให้ถี่ขึ้น เพื่อให้สัมพันธ์กับระบบ 20 วิ ของหลังบ้าน)
+      // 2. ยิงซ้ำทุกๆ 10 วินาที (สัมพันธ์กับ 20 วิของหลังบ้าน)
       heartbeatInterval = setInterval(() => {
-        axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'online' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
+        sendHeartbeat('online');
       }, 10000); 
 
-      // 3. 🚨 ท่าไม้ตาย (sendBeacon): ส่งข้อมูลเฮือกสุดท้ายตอนโดนกากบาทปิดหน้าจอ
+      // 3. ท่าไม้ตาย sendBeacon ตอนกดกากบาทปิดโปรแกรม
       const handleUnload = () => {
-        const payload = JSON.stringify({ cid: currentVhv.cid, status: 'offline' });
+        const payload = JSON.stringify({ cid: currentVhv.cid, status: 'offline', apiKey: API_KEY });
         const blob = new Blob([payload], { type: 'application/json' });
-        
-        // sendBeacon จะการันตีการส่งข้อมูล แม้แท็บ/โปรแกรมจะปิดตัวไปแล้วก็ตาม
         navigator.sendBeacon(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, blob);
       };
       
-      // ผูก Event ทั้ง 2 แบบเพื่อความชัวร์ (บางเบราว์เซอร์ชอบ pagehide มากกว่า)
       window.addEventListener('beforeunload', handleUnload);
       window.addEventListener('pagehide', handleUnload);
 
@@ -1791,24 +1793,17 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
             
           
       ) : !isLoggedIn ? (
-        
-        {/* 👈 เพิ่ม minHeight: 0 ให้หน้าจอหลักอนุญาตให้หดตัวได้ */}
         <main className="home-screen" style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', minHeight: 0 }}>
           <video key={customVideo} autoPlay loop playsInline style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0, opacity: 0.4 }}><source src={customVideo} type="video/mp4" /></video>
           
-          {/* 👈 ปรับ Margin เป็น 2vh เพื่อให้ระยะห่างยืดหยุ่นตามความสูงของจอภาพ */}
           <div onClick={handleManualRead} style={{ display: 'flex', justifyContent: 'center', margin: '2vh 0', cursor: 'pointer', position: 'relative', zIndex: 1 }}>
-            
-            {/* 👈 พระเอกอยู่ตรงนี้: ใส่ maxHeight: '40vh' ให้รูปภาพไม่สูงเกินไปจนดันปุ่มตกขอบจอ */}
             <img src="/nick.png" alt="กรุณาสอดบัตรประชาชน" style={{ maxWidth: '90%', maxHeight: '40vh', objectFit: 'contain', transition: 'transform 0.2s', filter: 'drop-shadow(0 15px 20px rgba(0,0,0,0.2))' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'} />
-          
           </div>
           
           <div className="instruction-text" style={{ position: 'relative', zIndex: 1, textShadow: '0 2px 4px rgba(255,255,255,0.9)' }}>
             {loading ? 'กำลังดึงข้อมูลและรูปถ่าย...' : 'กรุณาสอดบัตรประชาชน เพื่อเข้ารับบริการ'}
           </div>
           
-          {/* 👈 ปรับ marginTop เป็น 2vh เพื่อให้ระยะห่างยืดหยุ่น */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', position: 'relative', zIndex: 1, marginTop: '2vh', width: '100%' }}>
             
             <button 
