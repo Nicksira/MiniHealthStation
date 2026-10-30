@@ -647,36 +647,36 @@ app.post('/jhcis-api/vhv-heartbeat', checkApiKey, async (req, res) => {
     }
 });
 
+// ==========================================
+// 📊 API: สถิติผลงาน อสม. (อัปเกรด ดึงสถานะ Online)
+// ==========================================
 app.get('/jhcis-api/vhv-stats', checkApiKey, async (req, res) => {
-});
-
-// ==========================================
-// 🚀 API: เจาะลึกข้อมูลรายบุคคลของ อสม. (พระเอกของเรา)
-// ==========================================
-// 🔴 จุดสำคัญ: ต้องแน่ใจว่าตรงนี้เขียนว่า /jhcis-api/vhv-logs/:vhv_cid (ไม่มี -v2)
-app.get('/jhcis-api/vhv-logs/:vhv_cid', checkApiKey, async (req, res) => {
-    const vhvCid = req.params.vhv_cid;
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        
         const sql = `
             SELECT 
-                l.cid as patient_cid,
-                COALESCE(CONCAT(p.fname, ' ', p.lname), 'ไม่ทราบชื่อในระบบ') as patient_name,
-                l.weight, l.height, l.sys_dia, l.pulse, 
-                ROUND(l.temp, 1) as temp, 
-                l.waist, l.sugar,
-                DATE_FORMAT(l.search_date, '%d/%m/%Y %H:%i') as record_time
-            FROM kiosk_usage_log l
-            LEFT JOIN person p ON CONVERT(REPLACE(TRIM(p.idcard), '-', '') USING utf8) = CONVERT(REPLACE(TRIM(l.cid), '-', '') USING utf8)
-            WHERE l.vhv_cid = ?
-            ORDER BY l.search_date DESC
+                v.cid AS vhv_cid, 
+                v.name AS vhv_name,
+                /* 👈 คำนวณสถานะ Online: ถ้ามีการอัปเดตใน 3 นาทีที่ผ่านมา ถือว่ากำลัง Online */
+                IF(v.last_active >= NOW() - INTERVAL 3 MINUTE, 1, 0) AS is_online,
+                COUNT(l.id) AS total_patients,
+                SUM(CASE WHEN l.weight > 0 THEN 1 ELSE 0 END) AS weight_recorded,
+                SUM(CASE WHEN l.height > 0 THEN 1 ELSE 0 END) AS height_recorded,
+                SUM(CASE WHEN l.sys_dia != '' AND l.sys_dia IS NOT NULL AND l.sys_dia != '---' THEN 1 ELSE 0 END) AS bp_recorded,
+                SUM(CASE WHEN l.pulse > 0 THEN 1 ELSE 0 END) AS pulse_recorded,
+                SUM(CASE WHEN l.temp > 0 THEN 1 ELSE 0 END) AS temp_recorded,
+                SUM(CASE WHEN l.waist > 0 THEN 1 ELSE 0 END) AS waist_recorded,
+                SUM(CASE WHEN l.sugar > 0 THEN 1 ELSE 0 END) AS sugar_recorded
+            FROM kiosk_vhv v
+            LEFT JOIN kiosk_usage_log l ON v.cid = l.vhv_cid
+            GROUP BY v.cid, v.name, v.last_active
+            ORDER BY is_online DESC, total_patients DESC
         `;
-        const [rows] = await connection.execute(sql, [vhvCid]);
+        const [rows] = await connection.execute(sql);
         res.status(200).json({ success: true, data: rows });
     } catch (error) {
-        console.error("🔥 [Drill-down Error]:", error.message);
+        console.error("[Stats API] 🚨 Error:", error.message);
         res.status(500).json({ success: false, message: error.message });
     } finally {
         if (connection) await connection.end();
