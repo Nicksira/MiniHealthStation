@@ -1314,41 +1314,41 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     };
   }, [isLoggedIn]);
 
-  // 💓 ระบบส่งสัญญาณชีพจร (Heartbeat)
+  // ==========================================
+  // 💓 ระบบส่งสัญญาณชีพจร (Heartbeat) อัปเดตสถานะ Online ของ อสม.
+  // ==========================================
+  useEffect(() => {
+    let heartbeatInterval: NodeJS.Timeout;
+    
+    if (currentVhv) {
+      // 1. ยิงสัญญาณทันทีที่ล็อกอิน
+      axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'online' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
+      
+      // 2. 🚨 ยิงซ้ำทุกๆ 10 วินาที (ปรับให้ถี่ขึ้น เพื่อให้สัมพันธ์กับระบบ 20 วิ ของหลังบ้าน)
+      heartbeatInterval = setInterval(() => {
+        axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'online' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
+      }, 10000); 
 
-  const analyzeHealth = () => {
+      // 3. 🚨 ท่าไม้ตาย (sendBeacon): ส่งข้อมูลเฮือกสุดท้ายตอนโดนกากบาทปิดหน้าจอ
+      const handleUnload = () => {
+        const payload = JSON.stringify({ cid: currentVhv.cid, status: 'offline' });
+        const blob = new Blob([payload], { type: 'application/json' });
+        
+        // sendBeacon จะการันตีการส่งข้อมูล แม้แท็บ/โปรแกรมจะปิดตัวไปแล้วก็ตาม
+        navigator.sendBeacon(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, blob);
+      };
+      
+      // ผูก Event ทั้ง 2 แบบเพื่อความชัวร์ (บางเบราว์เซอร์ชอบ pagehide มากกว่า)
+      window.addEventListener('beforeunload', handleUnload);
+      window.addEventListener('pagehide', handleUnload);
 
-    let alerts = [];
-    let isEmergency = false;
-    if (vitals.height !== '---' && vitals.weight !== '---') {
-      const h = parseFloat(vitals.height) / 100;
-      const w = parseFloat(vitals.weight);
-      if (h > 0 && w > 0) {
-        const bmi = (w / (h * h)).toFixed(2);
-        if (Number(bmi) >= 30) alerts.push({ icon: 'fa-solid fa-triangle-exclamation', title: `โรคอ้วนระดับ 2 (BMI: ${bmi})`, desc: 'เสี่ยงโรคแทรกซ้อนสูงมาก แนะนำให้พบแพทย์และปรับพฤติกรรมด่วน', color: '#dc2626' });
-        else if (Number(bmi) >= 25) alerts.push({ icon: 'fa-solid fa-circle-exclamation', title: `โรคอ้วนระดับ 1 (BMI: ${bmi})`, desc: 'ควรเริ่มควบคุมอาหารและออกกำลังกาย', color: '#ea580c' });
-        else if (Number(bmi) >= 23) alerts.push({ icon: 'fa-solid fa-bell', title: `น้ำหนักเกิน (BMI: ${bmi})`, desc: 'ควรระวังเรื่องอาหารการกิน', color: '#ca8a04' });
-        else if (Number(bmi) >= 18.5) alerts.push({ icon: 'fa-solid fa-circle-check', title: `น้ำหนักปกติ (BMI: ${bmi})`, desc: 'รักษาสุขภาพได้ดีมากครับ', color: '#16a34a' });
-        else alerts.push({ icon: 'fa-solid fa-circle-info', title: `น้ำหนักต่ำกว่าเกณฑ์ (BMI: ${bmi})`, desc: 'ควรทานอาหารที่มีประโยชน์เพิ่มขึ้น', color: '#2563eb' });
-      }
+      return () => {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        window.removeEventListener('beforeunload', handleUnload);
+        window.removeEventListener('pagehide', handleUnload);
+      };
     }
-    if (vitals.sysDia !== '---') {
-      const [sys, dia] = vitals.sysDia.split('/').map(Number);
-      if (sys >= 180 || dia >= 120) {
-        isEmergency = true;
-        alerts.push({ icon: 'fa-solid fa-heart-crack', title: 'ความดันโลหิตสูงวิกฤต!', desc: 'อันตราย! เสี่ยงหลอดเลือดสมองแตก กรุณานั่งพัก ติดต่อเจ้าหน้าที่ทันที หรือโทร 1669', color: '#dc2626', isCrit: true });
-      } else if (sys >= 140 || dia >= 90) {
-        alerts.push({ icon: 'fa-solid fa-heart-circle-exclamation', title: 'ความดันโลหิตสูง', desc: 'ควรพบแพทย์เพื่อประเมินอาการอย่างละเอียด', color: '#ea580c' });
-      } else if (sys <= 90 || dia <= 60) {
-        alerts.push({ icon: 'fa-solid fa-heart-circle-minus', title: 'ความดันโลหิตต่ำ', desc: 'อาจมีอาการหน้ามืด วิงเวียน ควรพักผ่อนและดื่มน้ำให้เพียงพอ', color: '#2563eb' });
-      } else {
-        alerts.push({ icon: 'fa-solid fa-heart-circle-check', title: 'ความดันโลหิตปกติ', desc: 'อยู่ในเกณฑ์ที่ดีครับ', color: '#16a34a' });
-      }
-    }
-    return { alerts, isEmergency };
-  };
-
-  const healthAnalysis = analyzeHealth();
+  }, [currentVhv]);
 
  return (
     <div className="app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden', position: 'fixed', top: 0, left: 0, margin: 0, padding: 0 }}>
