@@ -60,15 +60,16 @@ function App() {
   const [smokeAdvice, setSmokeAdvice] = useState<string>(''); // 👈 🚨 เติมบรรทัดนี้กลับคืนมาตรงนี้ครับ
   const [sugarFasting, setSugarFasting] = useState<string>(''); // 👈 State เก็บสถานะเจาะน้ำตาล
 
-  // 👈 ฟังก์ชันเด้ง Popup เลือกสถานะน้ำตาล
+  // 👈 ฟังก์ชันเด้ง Popup เลือกสถานะน้ำตาล (ปรับให้แก้ไขได้)
   const handleSugarClick = async (inputElement: HTMLInputElement | null = null) => {
-    if (sugarFasting) return; // ถ้าเคยเลือกแล้ว ไม่ต้องเด้งอีก
+    // 🚨 ลบเงื่อนไข if (sugarFasting) return; ออก เพื่อให้เรียก Popup ซ้ำได้
     
     const { value: fastingOption } = await Swal.fire({
       title: 'ประเมินก่อนเจาะน้ำตาล',
       html: '<p style="color:#64748b;">กรุณาระบุสภาวะของคนไข้ก่อนเจาะเลือดค่ะ</p>',
       icon: 'question',
       input: 'radio',
+      inputValue: sugarFasting, // 👈 ให้ Popup จำค่าเดิมที่เคยเลือกไว้
       inputOptions: {
         'งดน้ำ-อาหาร': 'งดน้ำ - อาหารฯ',
         'ไม่งดน้ำ-อาหาร': 'ไม่งดน้ำ - อาหารฯ'
@@ -78,6 +79,8 @@ function App() {
       },
       confirmButtonText: 'ตกลง',
       confirmButtonColor: '#3b82f6',
+      showCancelButton: !!sugarFasting, // 👈 ถ้าเคยเลือกค่าไปแล้ว ให้มีปุ่มยกเลิกได้
+      cancelButtonText: 'ยกเลิก',
       allowOutsideClick: false
     });
 
@@ -553,6 +556,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
   };
 
   const handleLogout = () => {
+    if (currentVhv) axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'offline' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
     setIsLoggedIn(false);
     setPatient(null);
     setPatientPhoto(null);
@@ -1285,7 +1289,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     };
   }, [showSettings, adminTab, bpDate]);
 
-  useEffect(() => {
+    useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     
     const resetTimer = () => {
@@ -1311,7 +1315,29 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     };
   }, [isLoggedIn]);
 
+  // ==========================================
+  // 💓 ระบบส่งสัญญาณชีพจร (Heartbeat) อัปเดตสถานะ Online ของ อสม.
+  // ==========================================
+  useEffect(() => {
+    let heartbeatInterval: NodeJS.Timeout;
+    
+    if (currentVhv) {
+      // 1. ยิงสัญญาณทันทีที่ล็อกอิน
+      axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'online' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
+      
+      // 2. ยิงซ้ำทุกๆ 60 วินาที เพื่อรักษาสถานะ Online
+      heartbeatInterval = setInterval(() => {
+        axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'online' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
+      }, 60000); 
+    }
+
+    return () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+    };
+  }, [currentVhv]);
+
   const analyzeHealth = () => {
+
     let alerts = [];
     let isEmergency = false;
     if (vitals.height !== '---' && vitals.weight !== '---') {
@@ -1357,7 +1383,11 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
         <div style={{ display: 'flex', justifyContent: 'center', width: '100%', marginBottom: '15px' }}>
           {currentVhv ? (
               <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '8px 25px', borderRadius: '50px', fontSize: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)', border: '2px solid #34d399' }}>
-                  <span><i className="fa-solid fa-user-nurse"></i> อสม: {currentVhv.name}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* 🟢 จุดไฟกระพริบ Online สีเขียวสว่าง */}
+                    <span style={{ width: '10px', height: '10px', backgroundColor: '#6ee7b7', borderRadius: '50%', display: 'inline-block', animation: 'pulse 1.5s infinite', boxShadow: '0 0 10px rgba(110, 231, 183, 0.8)' }}></span>
+                    <i className="fa-solid fa-user-nurse"></i> อสม: {currentVhv.name}
+                  </span>
                   <button onClick={() => setCurrentVhv(null)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '20px', padding: '5px 15px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', transition: 'transform 0.2s' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>ออก</button>
               </div>
           ) : (
@@ -1511,7 +1541,18 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                     <tbody>
                       {vhvStatsData.length > 0 ? vhvStatsData.map((vhv: any, idx: number) => (
                         <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}>
-                          <td style={{ padding: '15px', textAlign: 'left', fontWeight: 'bold', color: '#334155', position: 'sticky', left: 0, background: 'inherit' }}>{vhv.vhv_name}</td>
+                          <td style={{ padding: '15px', textAlign: 'left', fontWeight: 'bold', color: '#334155', position: 'sticky', left: 0, background: 'inherit' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+       {vhv.vhv_name}
+       {/* 🟢 ไอคอนสถานะ Online */}
+       {vhv.is_online === 1 && (
+          <span style={{ fontSize: '11px', color: '#10b981', background: '#d1fae5', padding: '2px 8px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: '6px', height: '6px', background: '#10b981', borderRadius: '50%', display: 'inline-block', animation: 'pulse 1.5s infinite' }}></span>
+            Online
+          </span>
+       )}
+    </div>
+  </td>
                           <td style={{ padding: '15px' }}>
                              <button 
   onClick={() => {
@@ -2012,9 +2053,27 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                     <div className="vital-label" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       {item.label}
                       <small>{item.unit}</small>
-                      {/* 👈 เพิ่มตัวหนังสือแจ้งเตือนสถานะน้ำตาลใต้ชื่อช่อง */}
+                      {/* 👈 เปลี่ยนตัวหนังสือให้กลายเป็นปุ่มกดแก้ไขได้ */}
                       {item.id === 'sugar' && sugarFasting && (
-                         <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', marginTop: '2px' }}>({sugarFasting})</div>
+                         <div 
+                           onClick={() => handleSugarClick()}
+                           style={{ 
+                             fontSize: '12px', 
+                             color: 'white', 
+                             background: '#ef4444', 
+                             padding: '2px 10px', 
+                             borderRadius: '12px', 
+                             marginTop: '4px', 
+                             cursor: 'pointer', 
+                             boxShadow: '0 2px 4px rgba(239,68,68,0.3)',
+                             display: 'flex',
+                             alignItems: 'center',
+                             gap: '5px'
+                           }}
+                           title="คลิกเพื่อแก้ไขสถานะ"
+                         >
+                           {sugarFasting} <i className="fa-solid fa-pen-to-square"></i>
+                         </div>
                       )}
                     </div>
                     <div className="vital-value-box" style={{ padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

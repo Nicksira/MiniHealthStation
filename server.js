@@ -617,18 +617,49 @@ app.post('/jhcis-api/vhv-login', checkApiKey, async (req, res) => {
     console.log(`========================================\n`);
 });
 
-// // ==========================================
-// 📊 API: สถิติผลงาน อสม. (สำหรับ Admin) - [Optimized Projection]
+// ==========================================
+// 📡 API 11: ระบบ Heartbeat อัปเดตสถานะ Online ของ อสม.
+// ==========================================
+app.post('/jhcis-api/vhv-heartbeat', checkApiKey, async (req, res) => {
+    const { cid, status } = req.body;
+    if (!cid) return res.status(400).json({ success: false });
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        // 🚨 ออโต้สร้างคอลัมน์ last_active ถ้ายังไม่มีในฐานข้อมูล
+        try {
+            await connection.execute('ALTER TABLE kiosk_vhv ADD COLUMN last_active DATETIME DEFAULT NULL');
+        } catch (e) { /* ข้ามไปถ้ามีคอลัมน์นี้อยู่แล้ว */ }
+
+        if (status === 'online') {
+            await connection.execute('UPDATE kiosk_vhv SET last_active = NOW() WHERE cid = ?', [cid]);
+        } else if (status === 'offline') {
+            await connection.execute('UPDATE kiosk_vhv SET last_active = NULL WHERE cid = ?', [cid]);
+        }
+        
+        res.status(200).json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// ==========================================
+// 📊 API: สถิติผลงาน อสม. (อัปเกรด ดึงสถานะ Online)
 // ==========================================
 app.get('/jhcis-api/vhv-stats', checkApiKey, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        // 🛡️ Architect Note: การทำ Alias (AS vhv_cid) ต้องตรงกับที่ Frontend ร้องขอเสมอ
         const sql = `
             SELECT 
-                v.cid AS vhv_cid,  /* 👈 จุดตายอยู่ตรงนี้ครับ! ต้องบังคับส่ง cid ออกมาด้วย */
+                v.cid AS vhv_cid, 
                 v.name AS vhv_name,
+                /* 👈 คำนวณสถานะ Online: ถ้ามีการอัปเดตใน 3 นาทีที่ผ่านมา ถือว่ากำลัง Online */
+                IF(v.last_active >= NOW() - INTERVAL 3 MINUTE, 1, 0) AS is_online,
                 COUNT(l.id) AS total_patients,
                 SUM(CASE WHEN l.weight > 0 THEN 1 ELSE 0 END) AS weight_recorded,
                 SUM(CASE WHEN l.height > 0 THEN 1 ELSE 0 END) AS height_recorded,
@@ -639,8 +670,8 @@ app.get('/jhcis-api/vhv-stats', checkApiKey, async (req, res) => {
                 SUM(CASE WHEN l.sugar > 0 THEN 1 ELSE 0 END) AS sugar_recorded
             FROM kiosk_vhv v
             LEFT JOIN kiosk_usage_log l ON v.cid = l.vhv_cid
-            GROUP BY v.cid, v.name
-            ORDER BY total_patients DESC
+            GROUP BY v.cid, v.name, v.last_active
+            ORDER BY is_online DESC, total_patients DESC
         `;
         const [rows] = await connection.execute(sql);
         res.status(200).json({ success: true, data: rows });
