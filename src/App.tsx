@@ -1268,26 +1268,25 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
   }, []);
 
   // ==========================================
-  // 🔄 ระบบ Auto-Refresh สำหรับกระดานความดัน (Real-time 100%)
+  // 🔄 ระบบ Auto-Refresh สำหรับหน้าผลงาน อสม. (Real-time Online Status)
   // ==========================================
   useEffect(() => {
-    let bpInterval: NodeJS.Timeout;
+    let vhvInterval: NodeJS.Timeout;
     
-    // จะทำงานเฉพาะตอนที่เปิดหน้า Admin และอยู่ที่แท็บ 'bp' เท่านั้น
-    if (showSettings && adminTab === 'bp') {
-      
-      // ตั้งเวลาแอบไปดึงข้อมูลใหม่จากหลังบ้านทุกๆ 10 วินาที
-      bpInterval = setInterval(() => {
-        fetchBPData(bpDate);
-      }, 5000); // 10000 ms = 10 วินาที (ปรับความไวได้ตามต้องการ)
-      
+    // จะทำงานเฉพาะตอนที่ผู้ดูแลระบบเปิดแท็บ 'vhv' ดูสถิติอยู่
+    if (showSettings && adminTab === 'vhv') {
+      vhvInterval = setInterval(async () => {
+        try {
+          const res = await axios.get(`${API_BASE_URL}/jhcis-api/vhv-stats`, { headers: { 'x-api-key': API_KEY } });
+          if(res.data.success) setVhvStatsData(res.data.data);
+        } catch(e) {}
+      }, 5000); // 👈 แอบไปดึงข้อมูลใหม่มาอัปเดตตารางทุกๆ 5 วินาที
     }
     
-    // ล้างเวลาทิ้งเมื่อสลับไปแท็บอื่น เพื่อประหยัดการทำงานเครื่อง
     return () => {
-      if (bpInterval) clearInterval(bpInterval);
+      if (vhvInterval) clearInterval(vhvInterval);
     };
-  }, [showSettings, adminTab, bpDate]);
+  }, [showSettings, adminTab]);
 
     useEffect(() => {
     let timeoutId: NodeJS.Timeout;
@@ -1315,26 +1314,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     };
   }, [isLoggedIn]);
 
-  // ==========================================
-  // 💓 ระบบส่งสัญญาณชีพจร (Heartbeat) อัปเดตสถานะ Online ของ อสม.
-  // ==========================================
-  useEffect(() => {
-    let heartbeatInterval: NodeJS.Timeout;
-    
-    if (currentVhv) {
-      // 1. ยิงสัญญาณทันทีที่ล็อกอิน
-      axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'online' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
-      
-      // 2. ยิงซ้ำทุกๆ 60 วินาที เพื่อรักษาสถานะ Online
-      heartbeatInterval = setInterval(() => {
-        axios.post(`${API_BASE_URL}/jhcis-api/vhv-heartbeat`, { cid: currentVhv.cid, status: 'online' }, { headers: { 'x-api-key': API_KEY } }).catch(()=>{});
-      }, 60000); 
-    }
-
-    return () => {
-      if (heartbeatInterval) clearInterval(heartbeatInterval);
-    };
-  }, [currentVhv]);
+  // 💓 ระบบส่งสัญญาณชีพจร (Heartbeat)
 
   const analyzeHealth = () => {
 
