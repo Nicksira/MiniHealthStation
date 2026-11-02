@@ -113,6 +113,7 @@ function App() {
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [selectedBpRecord, setSelectedBpRecord] = useState<any>(null);
   const [followUpNote, setFollowUpNote] = useState('');
+  const [referStatus, setReferStatus] = useState(''); // 👈 เพิ่มตัวแปรเก็บสถานะ Refer
 
   // ฟังก์ชันดึงข้อมูลความดัน
   const fetchBPData = async (dateStr: string) => {
@@ -1806,7 +1807,25 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                         key={idx} 
                         onClick={() => {
                           setSelectedBpRecord(item);
-                          setFollowUpNote(item.follow_up_note || '');
+                          
+                          // ถอดรหัสสถานะ Refer ออกจากข้อความ
+                          let rawNote = item.follow_up_note || '';
+                          let textNote = '';
+
+                          if (rawNote.startsWith('[REFER] ')) {
+                              setReferStatus('refer');
+                              textNote = rawNote.replace('[REFER] ', '');
+                          } else if (rawNote.startsWith('[NOREFER] ')) {
+                              setReferStatus('norefer');
+                              textNote = rawNote.replace('[NOREFER] ', '');
+                          } else {
+                              setReferStatus('');
+                              textNote = rawNote;
+                          }
+                          
+                          // 🚨 บังคับใส่ข้อความจริงลงไปในกล่อง หากยังไม่เคยมีการบันทึกมาก่อน
+                          setFollowUpNote(textNote ? textNote : 'ติดตามอาการที่ รพ.สต.ทับพริก ');
+                          
                           setShowFollowUpModal(true);
                         }}
                         style={{ 
@@ -1829,9 +1848,23 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                                 </div>
                                 {/* 👈 ย้ายป้ายติดตามแล้ว มาไว้ข้างชื่อคนไข้ */}
                                 {item.follow_up_note && (
-                                  <span style={{ color: '#10b981', fontSize: '13px', fontWeight: 'bold', background: '#d1fae5', padding: '4px 10px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                                    <i className="fa-solid fa-circle-check"></i> ติดตามแล้ว
-                                  </span>
+                                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <span style={{ color: '#10b981', fontSize: '13px', fontWeight: 'bold', background: '#d1fae5', padding: '4px 10px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                      <i className="fa-solid fa-circle-check"></i> ติดตามแล้ว
+                                    </span>
+                                    
+                                    {/* 🚨 เพิ่มป้าย Refer หรือ No Refer ตามข้อมูลที่ซ่อนไว้ */}
+                                    {item.follow_up_note.startsWith('[REFER]') && (
+                                      <span style={{ color: '#ef4444', fontSize: '13px', fontWeight: 'bold', background: '#fee2e2', padding: '4px 10px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                        <i className="fa-solid fa-truck-medical fa-beat"></i> Refer
+                                      </span>
+                                    )}
+                                    {item.follow_up_note.startsWith('[NOREFER]') && (
+                                      <span style={{ color: '#0ea5e9', fontSize: '13px', fontWeight: 'bold', background: '#e0f2fe', padding: '4px 10px', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                        <i className="fa-solid fa-house-medical-circle-check"></i> No Refer
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                             </div>
 
@@ -2448,28 +2481,49 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
             </div>
 
             <label style={{ fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '10px' }}>บันทึกผลการติดตาม / การจัดการ:</label>
+            {/* 👇 เปลี่ยนข้อความ placeholder เป็น ติดตามอาการที่ รพ.สต.ทับพริก */}
             <textarea 
               autoFocus
               rows={4}
-              placeholder="เช่น ให้นั่งพัก 15 นาทีแล้ววัดใหม่, จ่ายยาลดความดัน, ส่งต่อพบแพทย์..."
+              placeholder="ติดตามอาการที่ รพ.สต.ทับพริก"
               value={followUpNote}
               onChange={(e) => setFollowUpNote(e.target.value)}
               style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '2px solid #cbd5e1', outline: 'none', fontSize: '16px', resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
             ></textarea>
+
+            <div style={{ display: 'flex', gap: '15px', width: '100%', marginTop: '15px' }}>
+              <button 
+                onClick={() => setReferStatus('refer')} 
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', border: referStatus === 'refer' ? '2px solid #ef4444' : '1px solid #cbd5e1', backgroundColor: referStatus === 'refer' ? '#fee2e2' : 'white', color: referStatus === 'refer' ? '#ef4444' : '#64748b', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              >
+                <i className="fa-solid fa-truck-medical"></i> ส่งต่อ (Refer)
+              </button>
+              <button 
+                onClick={() => setReferStatus('norefer')} 
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', border: referStatus === 'norefer' ? '2px solid #10b981' : '1px solid #cbd5e1', backgroundColor: referStatus === 'norefer' ? '#d1fae5' : 'white', color: referStatus === 'norefer' ? '#10b981' : '#64748b', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              >
+                <i className="fa-solid fa-house-medical-circle-check"></i> ไม่ส่งต่อ (No Refer)
+              </button>
+            </div>
 
             <div style={{ display: 'flex', gap: '15px', width: '100%', marginTop: '20px' }}>
               <button onClick={() => setShowFollowUpModal(false)} style={{ flex: 1, padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#f1f5f9', color: '#64748b', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }}>ยกเลิก</button>
               <button 
                 onClick={async () => {
                   try {
-                    await axios.post(`${API_BASE_URL}/jhcis-api/bp-followup`, { log_id: selectedBpRecord.log_id, note: followUpNote }, { headers: { 'x-api-key': API_KEY } });
+                    // 🚨 แนบสถานะ Refer ไปพร้อมกับข้อความ
+                    let finalNote = followUpNote;
+                    if (referStatus === 'refer') finalNote = '[REFER] ' + followUpNote;
+                    else if (referStatus === 'norefer') finalNote = '[NOREFER] ' + followUpNote;
+
+                    await axios.post(`${API_BASE_URL}/jhcis-api/bp-followup`, { log_id: selectedBpRecord.log_id, note: finalNote }, { headers: { 'x-api-key': API_KEY } });
                     setShowFollowUpModal(false);
-                    fetchBPData(bpDate); // โหลดข้อมูลกระดานใหม่เพื่อแสดงติ๊กถูกสีเขียว
+                    fetchBPData(bpDate);
                     Swal.fire({ title: 'บันทึกสำเร็จ!', text: 'อัปเดตข้อมูลการติดตามอาการเรียบร้อย', icon: 'success', timer: 1500, showConfirmButton: false });
                   } catch (e) {
                     alert('บันทึกไม่สำเร็จ กรุณาลองใหม่');
                   }
-                }} 
+                }}
                 style={{ flex: 1, padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#10b981', color: 'white', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(16,185,129,0.3)' }}
               >
                 <i className="fa-solid fa-save"></i> บันทึกข้อมูล

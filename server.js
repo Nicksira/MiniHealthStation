@@ -762,6 +762,48 @@ app.post('/jhcis-api/bp-followup', checkApiKey, async (req, res) => {
     }
 });
 
+// ==========================================
+// 📋 API 12: ดึงประวัติการบันทึกข้อมูลของ อสม. รายบุคคล (Drill-down)
+// ==========================================
+app.get('/jhcis-api/vhv-logs/:vhv_cid', checkApiKey, async (req, res) => {
+    const vhvCid = req.params.vhv_cid;
+    if (!vhvCid) return res.status(400).json({ success: false, message: 'ไม่มีรหัส อสม.' });
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        
+        // ดึงข้อมูล 200 รายการล่าสุดของ อสม. ท่านนี้ พร้อมเชื่อมชื่อคนไข้จากตาราง person
+        const sql = `
+            SELECT 
+                DATE_FORMAT(l.search_date, '%d/%m/%Y %H:%i') as record_time,
+                l.cid as patient_cid,
+                COALESCE(CONCAT(p.fname, ' ', p.lname), 'ไม่ทราบชื่อ') as patient_name,
+                l.weight,
+                l.height,
+                l.sys_dia,
+                l.pulse,
+                l.temp,
+                l.waist,
+                l.sugar
+            FROM kiosk_usage_log l
+            LEFT JOIN person p ON CONVERT(REPLACE(TRIM(p.idcard), '-', '') USING utf8) = CONVERT(REPLACE(TRIM(l.cid), '-', '') USING utf8)
+            WHERE l.vhv_cid = ?
+            ORDER BY l.search_date DESC
+            LIMIT 200
+        `;
+        
+        const [rows] = await connection.execute(sql, [vhvCid]);
+        
+        res.status(200).json({ success: true, data: rows });
+    } catch (error) {
+        console.error("[VHV Logs API] 🚨 Error:", error.message);
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 JHCIS API รอรับข้อมูลจาก Kiosk ที่พอร์ต ${PORT}`);
 });
