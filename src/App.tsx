@@ -680,6 +680,12 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     let checkCardInterval: NodeJS.Timeout;
     if (!loading && !showSettings && !isSubmitting && !showManualIdModal) {
       checkCardInterval = setInterval(async () => {
+        
+        // 🚨 1. เพิ่มบรรทัดนี้: ถ้าตรวจพบว่าเป็นมือถือ/แท็บเล็ต ให้ยกเลิกการเช็ค localhost ไปเลย!
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            return; 
+        }
+
         // 🚨 บล็อคไม่ให้เครื่องอ่านบัตรดูดข้อมูลอัตโนมัติ ถ้ายังไม่ล็อกอิน อสม.
         if (!currentVhv) return;
 
