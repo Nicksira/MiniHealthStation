@@ -606,10 +606,12 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     }
   };
 
-  // 🔄 ระบบตรวจจับการเสียบบัตรและดึงบัตรออกอัตโนมัติ (รองรับทั้ง PC และแท็บเล็ต Android)
+  // 🔄 ระบบตรวจจับบัตรประชาชน (อ่านเฉพาะตอนอยู่หน้าแรก เมื่อเข้าหน้าคัดกรองแล้วถอดบัตรออกได้ทันที)
   useEffect(() => {
     let checkCardInterval: NodeJS.Timeout;
-    if (!loading && !showSettings && !isSubmitting && !showManualIdModal) {
+    
+    // เช็คบัตรเฉพาะตอนที่ยังไม่ได้เข้าหน้าคนไข้ (!isLoggedIn)
+    if (!isLoggedIn && !loading && !showSettings && !isSubmitting && !showManualIdModal) {
       checkCardInterval = setInterval(async () => {
         if (!currentVhv) return;
 
@@ -617,17 +619,16 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
           const response = await axios.get('http://localhost:8189/api/smartcard/read?readImageFlag=true', { timeout: 2500 });
           if (response.data && response.data.pid) {
             setIsTestingMode(false);
-            if (!isLoggedIn) processCardData(response.data);
-          } else {
-            if (isLoggedIn && !isTestingMode) handleLogout();
+            processCardData(response.data);
           }
         } catch (e) {
-          if (isLoggedIn && !isTestingMode) handleLogout();
+          // กรณีไม่ได้เสียบบัตร ไม่ต้องทำอะไร
         }
       }, 2500);
     }
+    
     return () => clearInterval(checkCardInterval);
-  }, [isLoggedIn, loading, showSettings, isTestingMode, isSubmitting, showManualIdModal, currentVhv]);
+  }, [isLoggedIn, loading, showSettings, isSubmitting, showManualIdModal, currentVhv]);
 
   const connectBluetoothO2 = async () => {
     try {
@@ -1206,6 +1207,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
             await Swal.fire({
                 title: 'ขอบคุณครับ!', text: 'ระบบบันทึกคะแนนของคุณเรียบร้อยแล้ว', icon: 'success', timer: 2000, showConfirmButton: false
             });
+            handleLogout();
         }
       } 
     } catch (error) { 
