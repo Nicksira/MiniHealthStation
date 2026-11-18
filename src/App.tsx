@@ -572,69 +572,101 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
   };
 
   // ==========================================
-// 💳 ระบบอ่านบัตร ปชช. ผ่านมือถือ/แท็บเล็ต (WebUSB API สำหรับ ACR39 / FAST ID)
+// 💳 ระบบอ่านบัตร ปชช. ผ่านมือถือ/แท็บเล็ต (WebUSB)
 // ==========================================
-export const readThaiIDWebUSB = async () => {
+// 🚨 แก้ไข 1: ลบคำว่า export ออก
+const readThaiIDWebUSB = async () => {
+  // 🚨 แก้ไข 2: เปลี่ยน USBDevice เป็น any เพื่อไม่ให้ TypeScript ฟ้อง
+  let device: any = null; 
   try {
-    // 1. ขอสิทธิ์เชื่อมต่อเครื่องอ่านบัตร 
-    const device = await navigator.usb.requestDevice({
-      filters: [{ classCode: 0x0b }] 
-    });
+    // 🚨 แก้ไขเพิ่ม: ใส่ (navigator as any) เผื่อกรณี VS Code หาคำสั่ง USB ไม่เจอ
+    device = await (navigator as any).usb.requestDevice({ filters: [{ classCode: 0x0b }] });
 
     await device.open();
     if (device.configuration === null) await device.selectConfiguration(1);
-    
-    // 🧹 บังคับล้างคราบการเชื่อมต่อเก่าที่ค้างอยู่ในหัวเครื่องอ่านบัตร (แก้ปัญหา Samsung)
-    try { await device.reset(); } catch(err){}
-
+    try { await device.reset(); } catch(err) { console.log("Reset: ผ่าน"); }
     await device.claimInterface(0);
 
-    // 2. หาช่องทางสื่อสาร (Endpoints)
     let epIn = 0, epOut = 0;
     const endpoints = device.configuration.interfaces[0].alternate.endpoints;
-    endpoints.forEach(ep => {
+    endpoints.forEach((ep: any) => {
       if (ep.direction === 'in') epIn = ep.endpointNumber;
       if (ep.direction === 'out') epOut = ep.endpointNumber;
     });
 
-    // 3. ปลุกชิปบัตร (CCID: IccPowerOn)
-    const powerOnCmd = new Uint8Array([0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    await device.transferOut(epOut, powerOnCmd);
+    await device.transferOut(epOut, new Uint8Array([0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
     await device.transferIn(epIn, 64); 
 
-    // 4. ส่งรหัสลับ เลือกหมวดหมู่บัตร ปชช. ไทย
-    const selectAppletCmd = new Uint8Array([
+    await device.transferOut(epOut, new Uint8Array([
       0x6f, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 
       0x00, 0xa4, 0x04, 0x00, 0x08, 0xa0, 0x00, 0x00, 0x00, 0x54, 0x48, 0x00, 0x01 
-    ]);
-    await device.transferOut(epOut, selectAppletCmd);
+    ]));
     await device.transferIn(epIn, 64);
 
-    // 5. ส่งรหัสลับ ดึงเฉพาะเลข 13 หลัก
-    const readCidCmd = new Uint8Array([
+    await device.transferOut(epOut, new Uint8Array([
       0x6f, 0x07, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 
       0x80, 0xb0, 0x00, 0x04, 0x02, 0x00, 0x0d 
-    ]);
-    await device.transferOut(epOut, readCidCmd);
+    ]));
     const res = await device.transferIn(epIn, 64);
 
-    // 6. แปลงผลลัพธ์ให้กลายเป็นตัวเลข 13 หลัก
     const dataView = res.data;
     let cid = "";
-    for (let i = 10; i < 23; i++) {
-      if (dataView) cid += String.fromCharCode(dataView.getUint8(i));
+    if (dataView) {
+      for (let i = 10; i < 23; i++) {
+        cid += String.fromCharCode(dataView.getUint8(i));
+      }
     }
 
-    // คืนการเชื่อมต่อให้ระบบ
     await device.releaseInterface(0);
     await device.close();
 
     return cid;
-  } catch (error) {
-    console.error("WebUSB Error:", error);
-    throw error; // โยน Error สีแดงกลับไปหน้าจอหลัก
+  } catch (error: any) {
+    if (device && device.opened) {
+      try { await device.releaseInterface(0); } catch(e){}
+      try { await device.close(); } catch(e){}
+    }
+    throw new Error(error.message || "เกิดข้อผิดพลาดในการเชื่อมต่อ USB");
   }
 };
+
+  const handleManualRead = async () => {
+    if (!currentVhv) {
+        Swal.fire({
+            title: 'แจ้งเตือน', text: 'กรุณาลงชื่อเข้าปฏิบัติงาน อสม. ก่อนค่ะ', icon: 'warning',
+            confirmButtonText: '<i class="fa-solid fa-user-nurse"></i> ลงชื่อ อสม.', confirmButtonColor: '#8b5cf6'
+        }).then((result) => { if (result.isConfirmed) { setShowVhvLoginModal(true); setVhvIdInput(''); setVhvLoginError(''); } });
+        return; 
+    }
+
+    setLoading(true);
+    try {
+      const cid = await readThaiIDWebUSB();
+      
+      const cleanCid = cid.replace(/[^0-9]/g, ''); 
+
+      if (cleanCid && cleanCid.length === 13) {
+        speak('อ่านบัตรสำเร็จ กำลังค้นหาข้อมูลค่ะ');
+        setManualIdInput(cleanCid);
+        setTimeout(() => { processManualId(); }, 500); 
+      } else {
+        throw new Error("เสียบบัตรไม่แน่น หรือดึงข้อมูลผิดพลาด");
+      }
+    } catch (e: any) {
+      const errMsg = e.message || "";
+      if (errMsg.includes("No device selected") || errMsg.includes("User cancelled")) {
+         // กดยกเลิก ไม่ต้องเด้งอะไร
+      } else {
+         Swal.fire({
+            title: 'ข้อผิดพลาด USB',
+            html: `ระบบเครื่องอ่านบัตรแจ้งว่า: <br/><br/><strong style="color:red; font-size:18px;">${errMsg}</strong><br/><br/>คำแนะนำ: ลองถอดสาย OTG เสียบใหม่ แล้วดึงบัตร ปชช. เสียบให้แน่นๆ ครับ`,
+            icon: 'error'
+         });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleManualRead = async () => {
     // 🚨 1. เช็คว่ามี อสม. ล็อกอินหรือยัง 
