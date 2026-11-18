@@ -527,89 +527,6 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice(''); setSugarFasting('');
   };
 
-  // ==========================================
-  // 💳 ระบบอ่านบัตร ปชช. ผ่านมือถือ/แท็บเล็ต (WebUSB สำหรับ ACR39U / SCR-N88)
-  // ==========================================
-  const readThaiIDWebUSB = async () => {
-    let device: any = null;
-    try {
-      device = await (navigator as any).usb.requestDevice({
-        filters: [{ classCode: 0x0b }]
-      });
-
-      await device.open();
-      if (device.configuration === null) {
-        await device.selectConfiguration(1);
-      }
-
-      const iface = device.configuration.interfaces.find(
-        (i: any) => i.alternates[0].interfaceClass === 0x0b
-      ) || device.configuration.interfaces[0];
-
-      const ifaceNum = iface.interfaceNumber;
-      await device.claimInterface(ifaceNum);
-
-      let epIn = 0, epOut = 0;
-      const endpoints = iface.alternates[0].endpoints;
-      endpoints.forEach((ep: any) => {
-        if (ep.direction === 'in' && ep.type === 'bulk') epIn = ep.endpointNumber;
-        if (ep.direction === 'out' && ep.type === 'bulk') epOut = ep.endpointNumber;
-      });
-
-      let seq = 0;
-      const sendApdu = async (apdu: number[]) => {
-        const header = [
-          0x6f,
-          apdu.length & 0xff,
-          (apdu.length >> 8) & 0xff,
-          0x00, 0x00, 0x00,
-          seq++,
-          0x00, 0x00, 0x00
-        ];
-        const packet = new Uint8Array([...header, ...apdu]);
-        await device.transferOut(epOut, packet);
-
-        for (let retry = 0; retry < 5; retry++) {
-          const res = await device.transferIn(epIn, 256);
-          if (res.data && res.data.byteLength >= 10) {
-            const bStatus = res.data.getUint8(7);
-            const timeExt = (bStatus >> 6) & 0x03;
-            if (timeExt !== 2) return res.data;
-          }
-        }
-        throw new Error("บัตรประชาชนไม่ตอบสนอง");
-      };
-
-      const powerOn = new Uint8Array([0x62, 0x00, 0x00, 0x00, 0x00, 0x00, seq++, 0x00, 0x00, 0x00]);
-      await device.transferOut(epOut, powerOn);
-      await device.transferIn(epIn, 128);
-
-      await sendApdu([0x00, 0xa4, 0x04, 0x00, 0x08, 0xa0, 0x00, 0x00, 0x00, 0x54, 0x48, 0x00, 0x01]);
-
-      let dataView = await sendApdu([0x80, 0xb0, 0x00, 0x04, 0x02, 0x00, 0x0d]);
-
-      if (dataView.byteLength < 23) {
-        dataView = await sendApdu([0x00, 0xc0, 0x00, 0x00, 0x0d]);
-      }
-
-      let cid = "";
-      const maxLen = Math.min(23, dataView.byteLength);
-      for (let i = 10; i < maxLen; i++) {
-        cid += String.fromCharCode(dataView.getUint8(i));
-      }
-
-      await device.releaseInterface(ifaceNum);
-      await device.close();
-
-      return cid.replace(/[^0-9]/g, '');
-    } catch (error: any) {
-      if (device && device.opened) {
-        try { await device.close(); } catch (e) {}
-      }
-      throw new Error(error.message || "เกิดข้อผิดพลาดในการเชื่อมต่อ USB");
-    }
-  };
-
   const processManualId = async (overrideCid?: string) => {
     const targetCid = typeof overrideCid === 'string' ? overrideCid : manualIdInput;
     if (targetCid.length !== 13) {
@@ -641,64 +558,63 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     } catch (err: any) {
       if (err.response && err.response.status === 404) {
         setManualIdError('ไม่พบข้อมูลในระบบ JHCIS กรุณาติดต่อเจ้าหน้าที่');
-        Swal.fire('ไม่พบประวัติใน JHCIS', `อ่านเลขบัตรสำเร็จ (${targetCid}) แต่ไม่พบชื่อผู้ป่วยในฐานข้อมูล รพ.สต. ครับ`, 'warning');
       } else {
         setManualIdError('การเชื่อมต่อขัดข้อง กรุณาลองใหม่อีกครั้ง');
-        Swal.fire('การเชื่อมต่อขัดข้อง', 'อ่านบัตรสำเร็จ แต่ไม่สามารถติดต่อฐานข้อมูล JHCIS ได้ครับ', 'error');
       }
     } finally {
       setLoading(false);
     }
   };
 
+  // 💳 กดที่รูปหน้าจอเพื่อสั่งอ่านบัตรจากแอป JHCIS Card Bridge (Port 8189)
   const handleManualRead = async () => {
     if (!currentVhv) {
         Swal.fire({
-            title: 'แจ้งเตือน', text: 'กรุณาลงชื่อเข้าปฏิบัติงาน อสม. ก่อนค่ะ', icon: 'warning',
-            confirmButtonText: '<i class="fa-solid fa-user-nurse"></i> ลงชื่อ อสม.', confirmButtonColor: '#8b5cf6'
-        }).then((result) => { if (result.isConfirmed) { setShowVhvLoginModal(true); setVhvIdInput(''); setVhvLoginError(''); } });
-        return; 
+            title: 'แจ้งเตือน',
+            text: 'กรุณาลงชื่อเข้าปฏิบัติงาน อสม. ก่อนสอดบัตรหรือค้นหาประวัติคนไข้ค่ะ',
+            icon: 'warning',
+            confirmButtonText: '<i class="fa-solid fa-user-nurse"></i> ลงชื่อ อสม.',
+            confirmButtonColor: '#8b5cf6',
+            showCancelButton: true,
+            cancelButtonText: 'ปิด'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                setShowVhvLoginModal(true);
+                setVhvIdInput('');
+                setVhvLoginError('');
+            }
+        });
+        return;
     }
 
     setLoading(true);
     try {
-      const cleanCid = await readThaiIDWebUSB();
-
-      if (cleanCid && cleanCid.length === 13) {
-        speak('อ่านบัตรสำเร็จ กำลังค้นหาข้อมูลค่ะ');
-        setManualIdInput(cleanCid);
-        await processManualId(cleanCid);
+      const response = await axios.get('http://localhost:8189/api/smartcard/read?readImageFlag=true', { timeout: 4000 });
+      if (response.data && response.data.pid) {
+        await processCardData(response.data);
       } else {
-        throw new Error(`ดึงเลข 13 หลักไม่สำเร็จ (อ่านได้: "${cleanCid || 'ว่างเปล่า'}") กรุณาเสียบบัตรให้แน่นแล้วลองใหม่`);
+        Swal.fire('ไม่พบบัตรประชาชน', 'กรุณาสอดบัตรประชาชนให้แน่น แล้วแตะอีกครั้งครับ', 'warning');
       }
-    } catch (e: any) {
-      const errMsg = e.message || "";
-      if (!errMsg.includes("No device selected") && !errMsg.includes("User cancelled")) {
-         Swal.fire({
-            title: 'ข้อผิดพลาด USB (เวอร์ชันใหม่)',
-            html: `สาเหตุ: <br/><br/><strong style="color:red; font-size:18px;">${errMsg}</strong>`,
-            icon: 'error'
-         });
-      }
+    } catch (e) {
+      Swal.fire(
+        'ไม่สามารถติดต่อเครื่องอ่านบัตรได้',
+        'กรุณาเปิดแอป JHCIS Card Bridge บนแท็บเล็ตทิ้งไว้เบื้องหลัง แล้วเสียบสายเครื่องอ่านบัตรใหม่อีกครั้งครับ',
+        'error'
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  // 🔄 ระบบตรวจจับการเสียบบัตรและดึงบัตรออกอัตโนมัติ (รองรับทั้ง PC และแท็บเล็ต Android)
   useEffect(() => {
     let checkCardInterval: NodeJS.Timeout;
     if (!loading && !showSettings && !isSubmitting && !showManualIdModal) {
       checkCardInterval = setInterval(async () => {
-        // 🚨 1. เพิ่มบรรทัดนี้: ถ้าเปิดบนมือถือ/แท็บเล็ต ให้ยกเลิกการเช็คเครื่องอ่านบัตรอัตโนมัติ!
-        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-            return; 
-        }
-
-        // 🚨 บล็อคไม่ให้เครื่องอ่านบัตรดูดข้อมูลอัตโนมัติ ถ้ายังไม่ล็อกอิน อสม.
         if (!currentVhv) return;
 
         try {
-          const response = await axios.get('http://localhost:8189/api/smartcard/read?readImageFlag=true', { timeout: 1500 });
+          const response = await axios.get('http://localhost:8189/api/smartcard/read?readImageFlag=true', { timeout: 2500 });
           if (response.data && response.data.pid) {
             setIsTestingMode(false);
             if (!isLoggedIn) processCardData(response.data);
@@ -708,10 +624,10 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
         } catch (e) {
           if (isLoggedIn && !isTestingMode) handleLogout();
         }
-      }, 2000);
+      }, 2500);
     }
     return () => clearInterval(checkCardInterval);
-  }, [isLoggedIn, loading, showSettings, isTestingMode, isSubmitting, showManualIdModal, currentVhv]); // 👈 เพิ่ม currentVhv ตรงนี้ด้วย
+  }, [isLoggedIn, loading, showSettings, isTestingMode, isSubmitting, showManualIdModal, currentVhv]);
 
   const connectBluetoothO2 = async () => {
     try {
