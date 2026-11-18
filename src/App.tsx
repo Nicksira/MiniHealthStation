@@ -572,105 +572,104 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
   };
 
   // ==========================================
-  // 🚀 ฟังก์ชันพระเอก: เจาะชิปบัตร ปชช. ผ่านสาย OTG บน Android (WebUSB)
-  // ==========================================
-  const readThaiIDCardWebUSB = async () => {
-    try {
-      // 1. ขอสิทธิ์เชื่อมต่อ USB (กรองเฉพาะ Smart Card Reader Class: 0x0B)
-      const device = await navigator.usb.requestDevice({ filters: [{ classCode: 0x0B }] });
-      await device.open();
-      
-      // 2. เลือก Configuration และ Interface (มาตรฐาน CCID)
-      await device.selectConfiguration(1);
-      await device.claimInterface(0);
-      
-      // 3. หา Endpoint ท่อส่ง (IN) และท่อรับ (OUT) ของ ACR39
-      const endpoints = device.configuration.interfaces[0].alternates[0].endpoints;
-      const endpointIn = endpoints.find(e => e.direction === 'in')?.endpointNumber || 1;
-      const endpointOut = endpoints.find(e => e.direction === 'out')?.endpointNumber || 2;
+// 💳 ระบบอ่านบัตร ปชช. ผ่านมือถือ/แท็บเล็ต (WebUSB API สำหรับ ACR39 / FAST ID)
+// ==========================================
+export const readThaiIDWebUSB = async () => {
+  try {
+    // 1. ขอสิทธิ์เชื่อมต่อเครื่องอ่านบัตร 
+    const device = await navigator.usb.requestDevice({
+      filters: [{ classCode: 0x0b }] 
+    });
 
-      let seq = 0;
-      // ฟังก์ชันย่อยสำหรับแพ็กคำสั่ง APDU ใส่กล่อง CCID XfrBlock
-      const sendCcid = async (apduArray: number[]) => {
-        seq++;
-        const payload = new Uint8Array(10 + apduArray.length);
-        payload.set([0x6F, apduArray.length, 0x00, 0x00, 0x00, 0x00, seq, 0x00, 0x00, 0x00]); // Header XfrBlock
-        payload.set(apduArray, 10); // ยัดคำสั่ง APDU ต่อท้าย
-        
-        await device.transferOut(endpointOut, payload);
-        const res = await device.transferIn(endpointIn, 64);
-        return new Uint8Array(res.data!.buffer);
-      };
+    await device.open();
+    if (device.configuration === null) await device.selectConfiguration(1);
+    
+    // 🧹 บังคับล้างคราบการเชื่อมต่อเก่าที่ค้างอยู่ในหัวเครื่องอ่านบัตร (แก้ปัญหา Samsung)
+    try { await device.reset(); } catch(err){}
 
-      // 4. สั่งจ่ายไฟเข้าบัตร (IccPowerOn)
-      await device.transferOut(endpointOut, new Uint8Array([0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
-      await device.transferIn(endpointIn, 64); // รอรับค่า ATR ตอบกลับ
+    await device.claimInterface(0);
 
-      // 5. ส่ง APDU เลือกแอปเพล็ตบัตร ปชช. ไทย (SELECT)
-      await sendCcid([0x00, 0xA4, 0x04, 0x00, 0x08, 0xA0, 0x00, 0x00, 0x00, 0x54, 0x48, 0x00, 0x01]);
+    // 2. หาช่องทางสื่อสาร (Endpoints)
+    let epIn = 0, epOut = 0;
+    const endpoints = device.configuration.interfaces[0].alternate.endpoints;
+    endpoints.forEach(ep => {
+      if (ep.direction === 'in') epIn = ep.endpointNumber;
+      if (ep.direction === 'out') epOut = ep.endpointNumber;
+    });
 
-      // 6. ส่ง APDU ขออ่านเฉพาะเลข 13 หลัก (READ CID) แบบความเร็วแสง!
-      const cidRes = await sendCcid([0x80, 0xB0, 0x00, 0x04, 0x02, 0x00, 0x0D]);
+    // 3. ปลุกชิปบัตร (CCID: IccPowerOn)
+    const powerOnCmd = new Uint8Array([0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    await device.transferOut(epOut, powerOnCmd);
+    await device.transferIn(epIn, 64); 
 
-      // 7. ตัดเอาเฉพาะข้อมูล 13 ไบต์ (ข้าม Header 10 ตัวแรกของ CCID)
-      const cidBytes = cidRes.slice(10, 23);
-      const decoder = new TextDecoder('ascii');
-      const cidStr = decoder.decode(cidBytes);
+    // 4. ส่งรหัสลับ เลือกหมวดหมู่บัตร ปชช. ไทย
+    const selectAppletCmd = new Uint8Array([
+      0x6f, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 
+      0x00, 0xa4, 0x04, 0x00, 0x08, 0xa0, 0x00, 0x00, 0x00, 0x54, 0x48, 0x00, 0x01 
+    ]);
+    await device.transferOut(epOut, selectAppletCmd);
+    await device.transferIn(epIn, 64);
 
-      // 8. ตัดไฟ ปิดเครื่องอ่านเพื่อรักษาแบตมือถือ (IccPowerOff)
-      await device.transferOut(endpointOut, new Uint8Array([0x63, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
-      await device.close();
+    // 5. ส่งรหัสลับ ดึงเฉพาะเลข 13 หลัก
+    const readCidCmd = new Uint8Array([
+      0x6f, 0x07, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 
+      0x80, 0xb0, 0x00, 0x04, 0x02, 0x00, 0x0d 
+    ]);
+    await device.transferOut(epOut, readCidCmd);
+    const res = await device.transferIn(epIn, 64);
 
-      return cidStr; // ส่งคืนเลข 13 หลัก
-    } catch (err: any) {
-      console.error("WebUSB Error:", err);
-      throw new Error("ไม่สามารถอ่านบัตรได้ กรุณาตรวจสอบการเสียบสาย OTG หรือถอดเสียบใหม่ครับ");
+    // 6. แปลงผลลัพธ์ให้กลายเป็นตัวเลข 13 หลัก
+    const dataView = res.data;
+    let cid = "";
+    for (let i = 10; i < 23; i++) {
+      if (dataView) cid += String.fromCharCode(dataView.getUint8(i));
     }
-  };
+
+    // คืนการเชื่อมต่อให้ระบบ
+    await device.releaseInterface(0);
+    await device.close();
+
+    return cid;
+  } catch (error) {
+    console.error("WebUSB Error:", error);
+    throw error; // โยน Error สีแดงกลับไปหน้าจอหลัก
+  }
+};
 
   const handleManualRead = async () => {
-    // 🚨 1. เช็คว่ามี อสม. ล็อกอินหรือยัง
+    // 🚨 1. เช็คว่ามี อสม. ล็อกอินหรือยัง 
     if (!currentVhv) {
         Swal.fire({
-            title: 'แจ้งเตือน',
-            text: 'กรุณาลงชื่อเข้าปฏิบัติงาน อสม. ก่อนสอดบัตรหรือค้นหาประวัติคนไข้ค่ะ',
-            icon: 'warning',
-            confirmButtonText: '<i class="fa-solid fa-user-nurse"></i> ลงชื่อ อสม.',
-            confirmButtonColor: '#8b5cf6',
-            showCancelButton: true,
-            cancelButtonText: 'ปิด'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                setShowVhvLoginModal(true); setVhvIdInput(''); setVhvLoginError('');
-            }
-        });
+            title: 'แจ้งเตือน', text: 'กรุณาลงชื่อเข้าปฏิบัติงาน อสม. ก่อนค่ะ', icon: 'warning',
+            confirmButtonText: '<i class="fa-solid fa-user-nurse"></i> ลงชื่อ อสม.', confirmButtonColor: '#8b5cf6'
+        }).then((result) => { if (result.isConfirmed) { setShowVhvLoginModal(true); setVhvIdInput(''); setVhvLoginError(''); } });
         return; 
     }
 
     setLoading(true);
     try {
-      // 📱 เช็คว่าเป็นเบราว์เซอร์ที่รองรับ WebUSB (เช่น Chrome บน Android) หรือไม่
-      if (navigator.usb) {
-          // ใช้เทคโนโลยี WebUSB ดึงเลข 13 หลักตรงๆ ผ่านสาย OTG
-          const cidFromMobile = await readThaiIDCardWebUSB();
-          
-          if (cidFromMobile && cidFromMobile.length === 13) {
-              // ได้เลข 13 หลักมาแล้ว โยนเข้าฟังก์ชันค้นหาของเดิมได้เลย!
-              setManualIdInput(cidFromMobile);
-              setShowManualIdModal(false); // ซ่อน Popup
-              
-              // จำลองโครงสร้าง Response ให้เข้ากับโค้ดค้นหา JHCIS เดิม
-              const simulatedCardData = { pid: cidFromMobile, fname: 'กำลังดึงข้อมูล', lname: '' };
-              processCardData(simulatedCardData);
-          }
+      // 🚀 2. เรียกใช้งาน WebUSB ดึงเลข 13 หลัก
+      const cid = await readThaiIDWebUSB();
+      
+      if (cid && cid.length === 13) {
+        speak('อ่านบัตรสำเร็จ กำลังค้นหาข้อมูลค่ะ');
+        setManualIdInput(cid);
+        // ดีเลย์นิดนึงเพื่อให้ React นำเลข 13 หลักไปค้นหาประวัติ
+        setTimeout(() => { processManualId(); }, 300); 
       } else {
-          // 💻 กรณีเป็นคอมพิวเตอร์ หรือ iOS ให้วิ่งไปหาโปรแกรมสะพานเชื่อมตัวเก่า
-          const response = await axios.get('http://localhost:8189/api/smartcard/read?readImageFlag=true');
-          if (response.data && response.data.pid) processCardData(response.data);
-          else alert('กรุณาสอดบัตรประชาชนให้แน่น แล้วคลิกอีกครั้งครับ');
+        Swal.fire('ข้อมูลไม่สมบูรณ์', 'กรุณาถอดแล้วเสียบบัตรประชาชนใหม่อีกครั้งครับ', 'error');
       }
     } catch (e: any) {
-      alert(e.message || 'ไม่สามารถเชื่อมต่อเครื่องอ่านบัตรได้');
+      if (e.message && e.message.includes("No device selected")) {
+         // กดยกเลิกตอนเลือกเครื่องอ่านบัตร ไม่ต้องเด้งแจ้งเตือน
+      } else {
+         // 🚨 แสดง Error ที่แท้จริง (ตัวหนังสือสีแดง) ให้เรารู้ว่าพังตรงไหน
+         Swal.fire({
+            title: 'ข้อผิดพลาด USB',
+            html: `ระบบเครื่องอ่านบัตรแจ้งว่า: <br/><br/><strong style="color:red;">${e.message}</strong><br/><br/>(แคปภาพนี้มาให้ดูได้เลยครับ)`,
+            icon: 'error'
+         });
+      }
     } finally {
       setLoading(false);
     }
@@ -680,8 +679,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     let checkCardInterval: NodeJS.Timeout;
     if (!loading && !showSettings && !isSubmitting && !showManualIdModal) {
       checkCardInterval = setInterval(async () => {
-        
-        // 🚨 1. เพิ่มบรรทัดนี้: ถ้าตรวจพบว่าเป็นมือถือ/แท็บเล็ต ให้ยกเลิกการเช็ค localhost ไปเลย!
+        // 🚨 1. เพิ่มบรรทัดนี้: ถ้าเปิดบนมือถือ/แท็บเล็ต ให้ยกเลิกการเช็คเครื่องอ่านบัตรอัตโนมัติ!
         if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
             return; 
         }
