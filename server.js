@@ -78,31 +78,78 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
         const fastingText = data.sugarFastingStatus ? ` (${data.sugarFastingStatus})` : '';
         const vitalCheckText = sugar > 0 ? `DTX: ${sugar} mg/dL${fastingText}` : '';
         
-        let autoSymptoms = '';
-        let autoSymptomsco = '';
+        autoSymptomsco = '';
 
-        if (data.ageMonths !== undefined && data.ageMonths <= 60) {
-            autoSymptoms = 'ตรวจภาวะโภชนาการเด็ก 0-60 เดือน';
-            autoSymptomsco = `ตรวจกระตุ้นพัฒนาการ อายุ ${data.ageMonths} เดือน สมวัย`;
-        } else {
-            autoSymptoms = data.serviceType === 'screening'
-                ? 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป'
-                : 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.';
-            autoSymptomsco = 'ไม่มีเดินเซ ปากเบี้ยว พูดคุยรู้เรื่องชัดเจน ';
-        }
+        const timeService = data.timeService === '2' ? '2' : '1'; // 1 = ในเวลา, 2 = นอกเวลา
+        const diagNote = String(data.diagNote || '').trim().substring(0, 255);
 
         const sqlVisit = `
             INSERT INTO visit 
-            (pcucode, visitno, visitdate, pcucodeperson, pid, weight, height, pressure, pulse, temperature, waist, rightcode, rightno, timeservice, vitalcheck, symptoms, symptomsco) 
-            VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '1', ?, ?, ?)
+            (pcucode, visitno, visitdate, pcucodeperson, pid, weight, height, pressure, pulse, temperature, waist, rightcode, rightno, timeservice, vitalcheck, symptoms, symptomsco, diagnote) 
+            VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         await connection.execute(sqlVisit, [
-            p.pcucodeperson, vno, p.pcucodeperson, p.pid, 
-            weight, height, pressure, pulse, temp, waist, 
-            p.rightcode, p.rightno, vitalCheckText,
-            autoSymptoms, autoSymptomsco
+            p.pcucodeperson, vno, p.pcucodeperson, p.pid,
+            weight, height, pressure, pulse, temp, waist,
+            p.rightcode, p.rightno, timeService, vitalCheckText,
+            autoSymptoms, autoSymptomsco, diagNote
         ]);
 
+        // ✅ บันทึกรหัสโรค ICD-10 (ตาราง visitdiag) และวันนัด (ตาราง visitdiagappoint)
+        if (Array.isArray(data.icd10List) && data.icd10List.length > 0) {
+            for (const item of data.icd10List) {
+                if (!item.diagcode) continue;
+                try {
+                    await connection.execute(
+                        `INSERT INTO visitdiag (pcucode, visitno, diagcode, dxtype, dateupdate)
+                         VALUES (?, ?, ?, ?, NOW())
+                         ON DUPLICATE KEY UPDATE dxtype = VALUES(dxtype), dateupdate = NOW()`,
+                        [p.pcucodeperson, vno, item.diagcode, item.dxtype || '01']
+                    );
+                    // อัปเดตสถานะต่อเนื่อง (ถ้าฐานข้อมูลมีคอลัมน์ conti)
+                    if (item.conti) {
+                        try {
+                            await connection.execute(
+                                'UPDATE visitdiag SET conti = ? WHERE pcucode = ? AND visitno = ? AND diagcode = ?',
+                                [item.conti, p.pcucodeperson, vno, item.diagcode]
+                            );
+                        } catch (e) {}
+                    }
+                    // บันทึกวันนัด (ถ้าเจ้าหน้าที่ระบุวันนัด)
+                    if (item.appointDate) {
+                        try {
+                            await connection.execute(
+                                `INSERT INTO visitdiagappoint (pcucode, visitno, appodate, appotype, comment, diagcode)
+                                 VALUES (?, ?, ?, '1', ?, ?)`,
+                                [p.pcucodeperson, vno, item.appointDate, diagNote || 'นัดตรวจติดตาม', item.diagcode]
+                            );
+                        } catch (e) {}
+                    }
+                } catch (diagErr) {
+                    console.error('🔥 Warning visitdiag:', diagErr.message);
+                }
+            }
+        }
+
+        // ✅ บันทึกรายการยา / เวชภัณฑ์ / สมุนไพร / หัตถการ (ตาราง visitdrug)
+        if (Array.isArray(data.drugList) && data.drugList.length > 0) {
+            for (const drug of data.drugList) {
+                if (!drug.drugcode) continue;
+                try {
+                    const qty = parseFloat(drug.unit) || 1;
+                    const sellPrice = parseFloat(drug.realprice) || 0;
+                    const costPrice = parseFloat(drug.costprice) || 0;
+                    await connection.execute(
+                        `INSERT INTO visitdrug (pcucode, visitno, drugcode, unit, costprice, realprice, dose, dateupdate)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+                         ON DUPLICATE KEY UPDATE unit = VALUES(unit), realprice = VALUES(realprice), dose = VALUES(dose), dateupdate = NOW()`,
+                        [p.pcucodeperson, vno, drug.drugcode, qty, costPrice, sellPrice, String(drug.dose || '').substring(0, 255)]
+                    );
+                } catch (drugErr) {
+                    console.error('🔥 Warning visitdrug:', drugErr.message);
+                }
+            }
+        }
         if (sugar > 0) {
             try {
                 await connection.execute('INSERT INTO visitlabchcyesur (pcucode, visitno, dtc, dateupdate) VALUES (?, ?, ?, NOW())', [p.pcucodeperson, vno, sugar]);
@@ -133,6 +180,147 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
                 console.error("🔥 Warning: visitnutrition Error:", nutriErr.message);
             }
         }
+
+        // ==========================================
+// API ค้นหารหัสโรค ICD-10 (ตาราง cdisease)
+// ==========================================
+app.get('/jhcis-api/search-icd10', checkApiKey, async (req, res) => {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json({ success: true, data: [] });
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const like = `%${q}%`;
+        const [rows] = await connection.execute(
+            `SELECT diseasecode, diseasename, diseasenamethai 
+             FROM cdisease 
+             WHERE diseasecode LIKE ? OR diseasename LIKE ? OR diseasenamethai LIKE ? 
+             ORDER BY (diseasecode LIKE ?) DESC, diseasecode ASC 
+             LIMIT 30`,
+            [like, like, like, `${q}%`]
+        );
+        res.json({ success: true, data: rows });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// ==========================================
+// API ค้นหายา-เวชภัณฑ์-สมุนไพร-หัตถการ-ทันตกรรม (ตาราง cdrug)
+// ==========================================
+app.get('/jhcis-api/search-drug', checkApiKey, async (req, res) => {
+    const q = String(req.query.q || '').trim();
+    const category = String(req.query.category || 'all'); // all | herb | service | dental | adp
+
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        let whereType = '';
+        if (category === 'herb') whereType = " AND drugtype = '10' ";
+        else if (category === 'service') whereType = " AND drugtype IN ('02', '03') ";
+        else if (category === 'dental') whereType = " AND drugtype IN ('06', '02') ";
+        else if (category === 'adp') whereType = " AND drugtype = '11' ";
+
+        const like = `%${q}%`;
+        const [rows] = await connection.execute(
+            `SELECT drugcode, drugname, drugtype, 
+                    COALESCE(cost, 0) AS costprice, 
+                    COALESCE(sell, 0) AS realprice,
+                    COALESCE(unitsell, '') AS unitsell
+             FROM cdrug 
+             WHERE (drugname LIKE ? OR drugcode LIKE ?) ${whereType}
+             ORDER BY drugname ASC 
+             LIMIT 35`,
+            [like, like]
+        );
+        res.json({ success: true, data: rows });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// ==========================================
+// API ปุ่ม Re Med. ดึงรายการยา, โรคครั้งล่าสุด และประวัติแพ้ยา
+// ==========================================
+app.get('/jhcis-api/re-med/:cid', checkApiKey, async (req, res) => {
+    const cid = String(req.params.cid || '').trim();
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [pRows] = await connection.execute(
+            'SELECT pid, pcucodeperson FROM person WHERE idcard = ? LIMIT 1',
+            [cid]
+        );
+        if (pRows.length === 0) return res.json({ success: false, message: 'ไม่พบผู้ป่วย' });
+        const { pid, pcucodeperson } = pRows[0];
+
+        // 1. หาประวัติแพ้ยา (ตาราง personalergic)
+        let allergies = [];
+        try {
+            const [alRows] = await connection.execute(
+                `SELECT a.drugcode, COALESCE(c.drugname, a.drugcode) AS drugname 
+                 FROM personalergic a 
+                 LEFT JOIN cdrug c ON a.drugcode = c.drugcode 
+                 WHERE a.pid = ? AND a.pcucodeperson = ?`,
+                [pid, pcucodeperson]
+            );
+            allergies = alRows;
+        } catch (e) {}
+
+        // 2. หา visit ล่าสุดที่มีการจ่ายยา
+        const [lastVisits] = await connection.execute(
+            `SELECT v.visitno, v.visitdate, v.diagnote 
+             FROM visit v 
+             INNER JOIN visitdrug vd ON v.pcucode = vd.pcucode AND v.visitno = vd.visitno 
+             WHERE v.pid = ? AND v.pcucodeperson = ? 
+             ORDER BY v.visitdate DESC, v.visitno DESC 
+             LIMIT 1`,
+            [pid, pcucodeperson]
+        );
+
+        if (lastVisits.length === 0) {
+            return res.json({ success: true, drugs: [], diags: [], allergies, diagnote: '' });
+        }
+
+        const lastVno = lastVisits[0].visitno;
+
+        const [drugs] = await connection.execute(
+            `SELECT vd.drugcode, COALESCE(c.drugname, vd.drugcode) AS drugname,
+                    vd.unit, vd.realprice, vd.costprice, COALESCE(vd.dose, '') AS dose
+             FROM visitdrug vd
+             LEFT JOIN cdrug c ON vd.drugcode = c.drugcode
+             WHERE vd.pcucode = ? AND vd.visitno = ?`,
+            [pcucodeperson, lastVno]
+        );
+
+        const [diags] = await connection.execute(
+            `SELECT d.diagcode, COALESCE(cd.diseasenamethai, cd.diseasename, '') AS diseasename,
+                    COALESCE(d.dxtype, '01') AS dxtype
+             FROM visitdiag d
+             LEFT JOIN cdisease cd ON d.diagcode = cd.diseasecode
+             WHERE d.pcucode = ? AND d.visitno = ?`,
+            [pcucodeperson, lastVno]
+        );
+
+        res.json({
+            success: true,
+            lastVisitDate: lastVisits[0].visitdate,
+            diagnote: lastVisits[0].diagnote || '',
+            drugs,
+            diags,
+            allergies
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
 
         // ========================================================
         // 🎗️ โซนบันทึก SpecialPP (บุหรี่, สุรา)

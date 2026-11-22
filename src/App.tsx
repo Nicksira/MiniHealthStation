@@ -42,9 +42,411 @@ const PatientNameResolver = ({ cid, defaultName }: { cid: string, defaultName: s
   return <span style={{ color: name.includes('กำลังค้นหา') ? '#94a3b8' : 'inherit' }}>{name}</span>;
 };
 
+// 📋 ข้อความสำเร็จรูปตั้งต้นสำหรับช่อง อาการสำคัญ (symptoms)
+const DEFAULT_SYMPTOMS_PRESETS: string[] = [
+  'ตรวจภาวะโภชนาการเด็ก 0-72 เดือน ไตรมาส1/2570',
+  'ตรวจภาวะโภชนาการเด็ก 6-14 ปี',
+  'การตรวจคัดกรอง ncd เหล้า บุหรี่ ตรวจคัดกรองสุขภาพช่องปาก คัดกรองมะเร็งช่องปาก',
+  'คัดกรอง ncd เหล้า บุหรี่ ปี67',
+  'คัดกรองมะเร็งลำไส้ใหญ่ 2564',
+  'ฉีดยา Hema-plus ผู้ป่วยล้างไต ที่บ้าน',
+  'วัคซีน HPV ในเด็กผู้หญิง ปีงบ2569',
+  'วัคซีน HPV2 ในเด็กผู้หญิง ปีงบ 2569',
+  'เบาหวานความดัน เพื่อไปรับบริการตรวจ LAB ที่โรงพยาบาลอรัญประเทศ',
+  'Telemedicine ผู้ป่วยความดันโลหิตกลุ่มสีเขียว',
+  'การตรวจคัดกรองCVD risk 2569',
+  'การตรวจคัดกรองNCD  เหล้า บุหรี่ ปี2570',
+  'การตรวจคัดกรองมะเร็งเต้านม ปี 2569',
+  'การตรวจวัดความดันโลหิต ใน ผู้ป่วย เบาหวาน ความดันโลหิตสูง',
+  'การรับบริการคลินิก เบาหวาน ความดันโลหิตสูง',
+  'คัดกรองภาวะซึมเศร้า ปี 2569',
+  'คัดกรองมะเร็งลำไส้ใหญ่',
+  'จ่ายยาเม็ดเสริมธาตุเหล็ก',
+  'ฉีดยา / รับยาจิตเวช',
+  'ฉีดยา จิตเวช FLUPHENAZINE 25 mg IM q 1 month',
+  'ฉีดวัคซีน ไข้หวัดใหญ่ 2009',
+  'ฉีดวัคซีน ไข้หวัดใหญ่ 4 สายพันธุ์ ปี 2569',
+  'ฉีดวัคซีนนักเรียนชั้น ป.6 dT',
+  'ฉีดวัคซีนนักเรียนชั้น ป.6 dT และ วัคซีน HPV2 ในเด็กผู้หญิง',
+  'ดูแลทารกแรกเกิดครั้งที่',
+  'ตรวจ EKG ในกลุ่มผู้ป่วย เบาหวาน ความดันโลหิต ใน คลินิก รพ.สต.ทับพริก',
+  'ตรวจ Hct.',
+  'ตรวจLAB ประจำปี ชุดใหญ่ ที่รพ.อรัญประเทศ',
+  'ตรวจกระตุ้น พัฒนาการ DSPM ครั้งที่ 2',
+  'ตรวจคัดกรองด้วยตนเอง HPV Self-sampling',
+  'ตรวจคัดกรองมะเร็งลำไส้ (FIT TEST)',
+  'ตรวจคัดกรองสุขภาพช่องปากคัดกรองมะเร็งช่องปากปี 2569',
+  'ตรวจคัดกรองไวรัสตับอักเสบบี+ไวรัสตับอักเสบซี',
+  'ตรวจน้ำตาลในเลือดกลุ่มปรับเปลี่ยนพฤติกรรม NCD',
+  'ตรวจพัฒนาการแบบ DSPM  อายุ  18  เดือน',
+  'ตรวจพัฒนาการแบบ DSPM  อายุ  30  เดือน',
+  'ตรวจพัฒนาการแบบ DSPM  อายุ  42  เดือน',
+  'ตรวจพัฒนาการแบบ DSPM  อายุ  60  เดือน',
+  'ตรวจพัฒนาการแบบ DSPM  อายุ  9  เดือน',
+  'ตรวจภาวะแทรกซ้อนทางไต ผู้ป่วยความดันโลหิตสูง',
+  'ตรวจภาวะโภชนาการเด็ก 0-72 เดือน ไตรมาส4/2566',
+  'ตรวจภาวะโภชนาการเด็กอายุ 6-18 ปี',
+  'ตรวจรักษาผู้ป่วยเบาหวาน ความดันโลหิตสูง  ด้วยวิธี  Informed consent for Telemedicine โดยนายแพทย์ ราเชษฐ์ เชิงพนม',
+  'ตรวจวัดความดันโลหิตที่บ้านโดย อสม.',
+  'ตรวจสุขภาพช่องปาก นักเรียน ปี 2567',
+  'ตรวจสุขภาพช่องปาก เคลือบฟลูออไรด์  ประจำปี 2569',
+  'ตรวจสุขภาพช่องปากประจำปี 2569',
+  'ตรวจสุขภาพช่องปากเด็กก่อนวัยเรียน',
+  'ตรวจสุขภาพช่องปากในหญิงตั้งครรภ์',
+  'ตรวจสุขภาพพระสงฆ์ 2567',
+  'ตรวจเฝ้าระวังภาวะแทรกซ้อนตา ไต เท้า ผู้ป่วยเบาหวาน',
+  'ตรวจเลือดประจำปีผู้ป่วย DM  HT 2567',
+  'ตรวจและรับยาความดันโลหิตสูง',
+  'ตรวจและรับยาเบาหวาน',
+  'ตัวร้อน มีไข้สูง อาเจียน เป็นมาแล้ว 1 วัน',
+  'ตัวร้อน มีไข้สูง เป็นมาแล้ว 1 วัน',
+  'ติดตามนมแม่ 6 เดือน',
+  'ติดตามผลเลือด DM remission รอบ 2',
+  'ติดตามผู้ดื่มสุรา',
+  'ติดตามผู้ป่วยความดันโลหิตสูงเสี่ยง เบาหวาน',
+  'ติดตามผู้สูบบุหรี่',
+  'ติดตามอาการผู้ป่วยข้อเข่าเสื่อม',
+  'ติดตามเยี่ยมบ้าน ผู้ที่ตรวจคัดกรองมะเร็งปากมดลูก ที่มีผล ผิดปกติ Type 16  18',
+  'ทับหม้อเกลือ',
+  'ประเมินภาวะโภชนาการ เด็กวัยเรียน',
+  'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมูบ้าน โดย อสม.',
+  'ผู้ป่วยจิตเวช โครงการยาใจใกล้บ้าน',
+  'ผู้ป่วยเข้าร่วมโครงการ DM remission',
+  'ฟันผุเหลือแต่รากฟัน',
+  'รับบริการตรวจคัดกรอง เฝ้าระวัง และแก้ไขภาวะ สายตาผิดปกติในนักเรียนชั้น ป.1',
+  'รับบริการที่ health station ประจำหมู่บ้าน',
+  'วันที่ 20 10/10/69 ตรวจคัดกรอง NCD',
+  'วันนี้มารับบริการวางแผนครอบครัว',
+  'วันนี้มารับบริการสร้างเสริมภูมิคุ้มกันโรค',
+  'ส่งเสริมด้านการแพทย์แผนไทย',
+  'หญิงวัยเจริญพันธ์ เข้าโครงการแก้มแดง ใสไม่ซีด เสริมด้วยธาตุเหล็ก และกรดโฟลิก',
+  'อนามัยนักเรียน4-ตรวจโภชนาการฯ',
+  'อบสมุนไพร',
+  'เยี่ยมตรวจสุขภาพเด็ก กลุ่มปกติ',
+  'เยี่ยมบ้านผู้ป่วย palliative care',
+  'เยี่ยมบ้านผู้ป่วยโรควัณโรค',
+  'เยี่ยมบ้านผู้ป่วยโรคเรื้อรัง',
+  'เยี่ยมบ้านผู้พิการ',
+  'เยี่ยมบ้านเด็กทารกหลังคลอด ครั้งที่',
+  'เยี่ยมผู้ป่วยโรคหลอดเลือดสมอง',
+  'เยี่ยมมารดาหลังคลอด ครั้งที่',
+  'ให้บริการจ่ายยาน้ำเสริมธาตุเหล็ก',
+  'ให้บริการจ่ายยาเสริมธาตุเหล็กในเด็กอายุ6-12ปี',
+  'ให้บริการวัคซีนใน นักเรียน ชั้น ประถมศึกษาปีที่ 6'
+];
+
+// 📋 ข้อความสำเร็จรูปตั้งต้นสำหรับช่อง อาการร่วม / ประวัติเจ็บป่วย (symptomsco)
+const DEFAULT_SYMPTOMSCO_PRESETS: string[] = [
+  'ตรวจภาวะโภชนาการเด็ก 0-72 เดือน ไตรมาส 1/2570',
+  'FLUPHENNAZINE INJ(FENDEC) 25MG/1ML IM q 1 month',
+  'PARA      LMP    X    day   Last    ปี',
+  'VA ตาขวา =    ตาซ้าย  =   IOP  ตาขวา =  ตาซ้าย =',
+  'กลุ่มเสี่ยง 608',
+  'การคัดกรอง 2 Q ปกติ',
+  'การตรวจเต้านมทั้ง 2 ข้าง ด้วยตนเอง ไม่พบอาการผิดปกติ',
+  'กินยาต่อเนื่องสม่ำ เสมอ',
+  'คัดกรองผลปกติ',
+  'คัดกรองสารเคมีในเกษตรกร',
+  'คัดกรองเหล้า',
+  'คัดกรองเหล้า บุหรี่',
+  'คัดกรองโรคจิตและพฤติกรรม',
+  'จ่าย Ferrous fumarate 200 mg  tablet สัปดาห์ละ 1 เม็ด 6-12 ปี',
+  'จ่าย Ferrous fumarate 200 mg  tablet สัปดาห์ละ 1 เม็ด13-44 ปี',
+  'ฉีด คอตีบ บาดทะยัก',
+  'ฉีดวัคซีนนักเรียนในเด็ก ป.6',
+  'ฉีดวัคซีนไข้หวัดใหญ่',
+  'ตรวจ EKG ปี 2569',
+  'ตรวจกระตุ้นพัฒนาการ อายุ   เดือน สมวัย',
+  'ตรวจคัดกรอง NCD โดย อสม.',
+  'ตรวจคัดกรองโรคทางNCD  ยังไม่ป่วยเป็น เบาหวาน',
+  'ตรวจภาวะโภชนาการ 0-72 เดือน',
+  'ตรวจเหา ในโรงเรียน',
+  'ติดตามผู้ดื่มสุรา',
+  'ติดตามผู้สูบบุหรี่',
+  'ทาฟลูออไรด์วานิช  ปี 63',
+  'ทารกดูดนมได้ดี ไม่มีสำรอก ขับถ่าย ปกติ',
+  'ทารกดูดนมได้ดีไม่มีสำรอก ท้องอืดเล็กน้อย สะดือหลุดแล้ว แห้งสะอาดดีไม่มีหนอง ขับถ่าย ปกติ',
+  'ปฎิเสธโรคประจำตัวและการแพ้ยา',
+  'ประเมินตามแบบสอบถาม',
+  'ปวดมากช่วงเช้า',
+  'ผลการตรวจ FIT Test Negative',
+  'ผลการตรวจ FIT Test Positive',
+  'ผลการตรวจ ตาปกติ',
+  'ผลการตรวจการได้ยินปกติ',
+  'ผลการตรวจจอประสาทตา ผล NO DL',
+  'ผลปกติทั้ง 2 ข้าง',
+  'ผู้ป่วย ADL=0 รับประทานอาหารได้น้อย',
+  'ผู้ป่วย ในคลินิกเบาหวาน  รพ.สต.ทับพริก',
+  'พัฒนาการ 18 เดือน  สมวัย',
+  'พัฒนาการ 30 เดือน  สมวัย',
+  'พัฒนาการ 42 เดือน  สมวัย',
+  'พัฒนาการ 60 เดือน  สมวัย',
+  'พัฒนาการ 9 เดือน  สมวัย',
+  'พัฒนาการสมวัย หลังกระตุ้น 2-4 weeks',
+  'พัฒนาการไม่สมวัย กระตุ้น 2-4 weeks',
+  'ฟังผลเลือดประจำปี โดยนายแพทย์ราเชษฐ์  เชิงพนม (รพ.อรัญประเทศ)',
+  'มารดาหลังคลอด ไม่มีซึมเศร้า ช่วยเหลือตนเอง ปวดแผล C/S เล็กน้อย',
+  'มารดาหลังคลอดพูดคุยรู้เรื่องดี ไม่มีซึมเศร้าหลังคลอด  รับประทานอาหารได้ ขับถ่ายปกติ กินยาเสริมไอโอดีนทุกวัน',
+  'รับบริการ วัคซีนสร้างเสริมภูมิคุ้มกันโรค  MMR 9 เดือน',
+  'รับบริการตรวจและรับยาเบาหวาน',
+  'รับบริการยาคุมชนิดฉีด',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค dt ครั้งที่ 1',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค dT ประถมศึกษาปีที่ 6',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค IPV+DTP-HB-HIB+Rota ครั้งที่ 2',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค IPV+DTPHB +Hib +Rota ครั้งที่ 1',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค OPV+DTP กระตุ้น ครั้งที่ 1     MMR 2',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค OPV+DTP กระตุ้น ครั้งที่ 1+MMR2',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค OPV+DTP-HB-Hib+IPV  ครั้งที่ 2',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค OPV+DTPHB  ครั้งที่ 1',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค OPV+DTPHB  ครั้งที่ 3',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค OPV+DTPHB -Hib ครั้งที่ 3',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค OPV+DTPกระตุ้น ครั้งที่ 2',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรค ไข้หวัดใหญ่',
+  'รับบริการวัคซีนสร้างสร้างภูมิคุ้มกันโรคHPV ประถมศึกษาปีที่ 5',
+  'รับบริการวัคซีนสร้างเสริมภูมิคุ้มกันโรค JE Live ครั้งที่ 1',
+  'รับบริการวัคซีนสร้างเสริมภูมิคุ้มกันโรคอายุ 2 ขวบครึ่ง JE Live ครั้งที่ 2',
+  'รับยา ความดันโลหิตสูง',
+  'รับยาความดันโลหิตสูง',
+  'รับยาคุมกำเนิดชนิดเม็ด',
+  'รับยาจิตเวช จากรพ.อรัญประเทศ',
+  'ล้างแผลกดทับที่ก้น',
+  'วัดความดันโลหิต',
+  'สรุปการประเมินความเสี่ยงในการท างานของเกษตรกรจากการสัมผัสสารเคมีกำจัดศัตรูพืช มีความเสี่ยง ต่ำ',
+  'สรุปการประเมินความเสี่ยงในการท างานของเกษตรกรจากการสัมผัสสารเคมีกำจัดศัตรูพืช มีความเสี่ยงสูง',
+  'สอนแปรงฟัน ทาฟลูออไรค์วานิช ปี65',
+  'ส่งเสริมด้านการแพทย์แผนไทยและแพทย์ทางเลือก',
+  'หญิงวัยเจริญพันธุ์ เข้าสู่โครงการหญิงไทยแก้มแดง ไม่ซีด เสริมด้วยธาตุเหล็กและกรดโฟลิค',
+  'อาการทั่วไปปกติ',
+  'เกิดก่อน ปี พ.ศ.2535',
+  'แจ้งผลการตรวจ  HPV Self-sampling',
+  'แผลแห้งดีไม่มีหนอง',
+  'โภชนาการ 6-14 ปี',
+  'ได้รับผลการตรวจPAP SMEAR เมื่อวันที่ 11 ก.พ.2564 จาก GM Laboratory',
+  'ไม่มีประวัติแพ้ไข่ ไม่มีไข้',
+  'ไม่มีปัญหาด้านการรับประทานอาหาร',
+  'ไม่มีผลข้างเคียงหลังจากได้รับวัคซีนไข้หวัดใหญ่',
+  'ไม่มีภาวะซึมเศร้า',
+  'ไม่มีอาการบวมแดงร้อน',
+  'ไม่มีเดินเซ ปากเบี้ยว พูดคุยรู้เรื่องชัดเจน'
+];
+
 function App() {
   // 🦸‍♂️ State สำหรับระบบ อสม.
   const [currentVhv, setCurrentVhv] = useState<{cid: string, name: string} | null>(null);
+  // 🌟 เช็คสิทธิ์เจ้าหน้าที่
+  const isStaffLoggedIn = Boolean(currentVhv && ['3251000441639', '1259700107058', '1279800022828'].includes(currentVhv.cid));
+
+  // 📝 State เก็บข้อความที่เจ้าหน้าที่พิมพ์/เลือกเอง
+  const [customSymptoms, setCustomSymptoms] = useState<string>('');
+  const [customSymptomsco, setCustomSymptomsco] = useState<string>('');
+
+  // 📋 คลังข้อความสำเร็จรูปช่อง อาการสำคัญ (symptoms)
+  const [symptomsPresets, setSymptomsPresets] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('jhcis_symptoms_presets');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_SYMPTOMS_PRESETS;
+  });
+
+  // 📋 คลังข้อความสำเร็จรูปช่อง อาการร่วม (symptomsco)
+  const [symptomscoPresets, setSymptomscoPresets] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('jhcis_symptomsco_presets');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_SYMPTOMSCO_PRESETS;
+  });
+
+  // 🪟 State ควบคุมหน้าต่าง Popup ข้อความสำเร็จรูป
+  const [presetModalTarget, setPresetModalTarget] = useState<'symptoms' | 'symptomsco' | null>(null);
+  const [presetSearch, setPresetSearch] = useState('');
+  const [newPresetInput, setNewPresetInput] = useState('');
+
+  // กดเลือกข้อความ -> เอาไปต่อท้ายในช่องที่เปิดอยู่
+  const handleSelectPreset = (text: string) => {
+    if (presetModalTarget === 'symptoms') {
+      setCustomSymptoms(prev => (prev.trim() ? `${prev.trim()} ${text}` : text));
+    } else if (presetModalTarget === 'symptomsco') {
+      setCustomSymptomsco(prev => (prev.trim() ? `${prev.trim()} ${text}` : text));
+    }
+  };
+
+  // เพิ่มข้อความสำเร็จรูปใหม่ด้วยตัวเอง
+  const handleAddPreset = () => {
+    const trimmed = newPresetInput.trim();
+    if (!trimmed || !presetModalTarget) return;
+
+    const isCC = presetModalTarget === 'symptoms';
+    const currentList = isCC ? symptomsPresets : symptomscoPresets;
+
+    if (currentList.includes(trimmed)) {
+      Swal.fire({ title: 'มีข้อความนี้อยู่แล้ว', icon: 'info', timer: 1200, showConfirmButton: false });
+      return;
+    }
+
+    const updated = [trimmed, ...currentList];
+    if (isCC) {
+      setSymptomsPresets(updated);
+      localStorage.setItem('jhcis_symptoms_presets', JSON.stringify(updated));
+    } else {
+      setSymptomscoPresets(updated);
+      localStorage.setItem('jhcis_symptomsco_presets', JSON.stringify(updated));
+    }
+    setNewPresetInput('');
+  };
+
+  // ลบข้อความสำเร็จรูป
+  const handleDeletePreset = (textToDelete: string) => {
+    if (!presetModalTarget) return;
+    const isCC = presetModalTarget === 'symptoms';
+    const currentList = isCC ? symptomsPresets : symptomscoPresets;
+    const updated = currentList.filter(item => item !== textToDelete);
+
+    if (isCC) {
+      setSymptomsPresets(updated);
+      localStorage.setItem('jhcis_symptoms_presets', JSON.stringify(updated));
+    } else {
+      setSymptomscoPresets(updated);
+      localStorage.setItem('jhcis_symptomsco_presets', JSON.stringify(updated));
+    }
+  };
+
+  // 🩺 State สำหรับโซนวินิจฉัย (ICD-10) และ ยา-เวชภัณฑ์-หัตถการ (เฉพาะเจ้าหน้าที่)
+  const [diagNote, setDiagNote] = useState<string>('');
+  const [icd10List, setIcd10List] = useState<{ diagcode: string; diseasename: string; dxtype: string; conti: string; appointDate: string }[]>([]);
+  const [icdSearch, setIcdSearch] = useState<string>('');
+  const [icdResults, setIcdResults] = useState<any[]>([]);
+
+  const [timeService, setTimeService] = useState<'1' | '2'>('1');
+  const [foodAllergy, setFoodAllergy] = useState<string>('');
+  const [drugAllergies, setDrugAllergies] = useState<any[]>([]);
+  const [drugCategory, setDrugCategory] = useState<'all' | 'herb' | 'service' | 'dental' | 'adp'>('all');
+  const [drugSearch, setDrugSearch] = useState<string>('');
+  const [drugResults, setDrugResults] = useState<any[]>([]);
+  const [drugList, setDrugList] = useState<{ drugcode: string; drugname: string; unit: number; realprice: number; costprice: number; dose: string; recorder: string }[]>([]);
+
+  // ฟังก์ชันล้างข้อมูลโซนแพทย์เมื่อเปลี่ยนคนไข้
+  const resetClinicalOrderFields = () => {
+    setDiagNote('');
+    setIcd10List([]);
+    setIcdSearch('');
+    setIcdResults([]);
+    setTimeService('1');
+    setFoodAllergy('');
+    setDrugAllergies([]);
+    setDrugCategory('all');
+    setDrugSearch('');
+    setDrugResults([]);
+    setDrugList([]);
+  };
+
+  // ค้นหา ICD-10 แบบ Real-time
+  const handleSearchIcd10 = async (keyword: string) => {
+    setIcdSearch(keyword);
+    if (keyword.trim().length < 2) { setIcdResults([]); return; }
+    try {
+      const res = await axios.get(`${API_BASE_URL}/jhcis-api/search-icd10?q=${encodeURIComponent(keyword.trim())}`, {
+        headers: { 'x-api-key': API_KEY }
+      });
+      if (res.data.success) setIcdResults(res.data.data || []);
+    } catch (e) {}
+  };
+
+  // เพิ่มรหัส ICD-10 ลงตาราง
+  const handleAddIcd10 = (row: any) => {
+    if (icd10List.some(x => x.diagcode === row.diseasecode)) return;
+    setIcd10List(prev => [
+      ...prev,
+      {
+        diagcode: row.diseasecode,
+        diseasename: row.diseasenamethai || row.diseasename || '',
+        dxtype: prev.length === 0 ? '01' : '02',
+        conti: '0',
+        appointDate: ''
+      }
+    ]);
+    setIcdSearch('');
+    setIcdResults([]);
+  };
+
+  // ค้นหายา / สมุนไพร / หัตถการ / ทันตกรรม / ADP
+  const handleSearchDrug = async (keyword: string, cat = drugCategory) => {
+    setDrugSearch(keyword);
+    if (keyword.trim().length < 1 && cat === 'all') { setDrugResults([]); return; }
+    try {
+      const res = await axios.get(
+        `${API_BASE_URL}/jhcis-api/search-drug?q=${encodeURIComponent(keyword.trim())}&category=${cat}`,
+        { headers: { 'x-api-key': API_KEY } }
+      );
+      if (res.data.success) setDrugResults(res.data.data || []);
+    } catch (e) {}
+  };
+
+  // เพิ่มยา/หัตถการลงตาราง
+  const handleAddDrug = (row: any) => {
+    setDrugList(prev => [
+      ...prev,
+      {
+        drugcode: row.drugcode,
+        drugname: row.drugname,
+        unit: 1,
+        realprice: Number(row.realprice) || 0,
+        costprice: Number(row.costprice) || 0,
+        dose: '',
+        recorder: currentVhv?.name || 'เจ้าหน้าที่'
+      }
+    ]);
+    setDrugSearch('');
+    setDrugResults([]);
+  };
+
+  // ปุ่ม Re Med. ดึงยาและโรคครั้งล่าสุดของคนไข้คนนี้จาก JHCIS
+  const handleReMed = async () => {
+    if (!patient?.cid) return;
+    try {
+      const res = await axios.get(`${API_BASE_URL}/jhcis-api/re-med/${patient.cid}`, {
+        headers: { 'x-api-key': API_KEY }
+      });
+      if (res.data.success) {
+        if (res.data.allergies?.length > 0) setDrugAllergies(res.data.allergies);
+        if (res.data.diagnote && !diagNote) setDiagNote(res.data.diagnote);
+        if (res.data.diags?.length > 0) {
+          setIcd10List(res.data.diags.map((d: any) => ({
+            diagcode: d.diagcode,
+            diseasename: d.diseasename || '',
+            dxtype: d.dxtype || '01',
+            conti: '1',
+            appointDate: ''
+          })));
+        }
+        if (res.data.drugs?.length > 0) {
+          setDrugList(res.data.drugs.map((d: any) => ({
+            drugcode: d.drugcode,
+            drugname: d.drugname,
+            unit: Number(d.unit) || 1,
+            realprice: Number(d.realprice) || 0,
+            costprice: Number(d.costprice) || 0,
+            dose: d.dose || '',
+            recorder: currentVhv?.name || 'เจ้าหน้าที่'
+          })));
+          Swal.fire({ title: 'ดึงรายการยาครั้งก่อนสำเร็จ', text: `พบรายการยา ${res.data.drugs.length} รายการ`, icon: 'success', timer: 1500, showConfirmButton: false });
+        } else {
+          Swal.fire({ title: 'ไม่พบประวัติจ่ายยาก่อนหน้า', icon: 'info', timer: 1500, showConfirmButton: false });
+        }
+      }
+    } catch (e) {
+      Swal.fire('ไม่สามารถดึงข้อมูล Re Med. ได้', 'กรุณาตรวจสอบการเชื่อมต่อฐานข้อมูล JHCIS', 'error');
+    }
+  };
+  
+    
   const [showVhvLoginModal, setShowVhvLoginModal] = useState(false);
   const [vhvIdInput, setVhvIdInput] = useState('');
   const [vhvLoginError, setVhvLoginError] = useState('');
@@ -486,8 +888,7 @@ const NUTRITION_DICT: any = {
       setAiResponse('');
       
       // แก้เป็นแบบนี้ทั้ง 3 จุดเลยครับ
-setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice(''); setSugarFasting('');
-      // ... โค้ดเดิมข้างล่าง ...
+setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice(''); setSugarFasting(''); setCustomSymptoms(''); setCustomSymptomsco(''); resetClinicalOrderFields();
 
       try {
         const jhcisResponse = await axios.get(`${API_BASE_URL}/jhcis-api/patient/${cid}`, {
@@ -524,7 +925,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     setPatientImage(null); 
     setIsTestingMode(false);
     setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---', headCircum: '---' });
-    setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice(''); setSugarFasting('');
+    setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice(''); setSugarFasting(''); setCustomSymptoms(''); setCustomSymptomsco(''); resetClinicalOrderFields();
   };
 
   const processManualId = async (overrideCid?: string) => {
@@ -546,7 +947,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
       if (response.data.success) {
         setVitals({ height: '---', weight: '---', waist: '---', bmi: '---', temp: '---', spo2: '---', sysDia: '---', pulse: '---', sugar: '---', headCircum: '---' });
         setAiResponse('');
-        setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice(''); setSugarFasting('');
+        setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(''); setSmokeAdvice(''); setAlcoholAdvice(''); setSugarFasting(''); setCustomSymptoms(''); setCustomSymptomsco(''); resetClinicalOrderFields();
 
         setPatient({ ...response.data.data, cid: targetCid });
         await fetchPatientPhoto(targetCid); 
@@ -1100,6 +1501,17 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
       }
     }
 
+    // 🚨 3. ถ้าเป็นเจ้าหน้าที่ ให้เช็คว่าพิมพ์อาการสำคัญหรือยัง
+    if (isAdult && isStaffLoggedIn && !customSymptoms.trim()) {
+      Swal.fire({
+        title: 'กรุณาระบุอาการสำคัญ!',
+        text: 'กรุณาพิมพ์อาการสำคัญของผู้ป่วยก่อนบันทึกข้อมูลเข้า JHCIS',
+        icon: 'warning',
+        confirmButtonText: 'รับทราบ',
+        confirmButtonColor: '#4f46e5'
+      });
+      return;
+    }
     // ถ้าข้อมูลครบถ้วนทั้งหมด ถึงจะแสดงหน้าต่างยืนยันการบันทึก
     setShowConfirmQueueModal(true);
   };
@@ -1118,24 +1530,31 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     const payload = {
       cid: patient.cid,
       vhv_cid: currentVhv ? currentVhv.cid : null,
-      ageMonths: patient?.age_months, // 👈 แนบอายุเดือนไปให้หลังบ้าน
-      headCircum: vitals.headCircum === '---' ? 0 : parseFloat(vitals.headCircum), // 👈 แนบรอบศีรษะ
-      nlevel: childDev.nlevel,           // 👈 เพิ่ม 4 บรรทัดนี้
-      nlevel2: childDev.nlevel2,         // 👈
-      nlevel3: childDev.nlevel3,         // 👈
-      growdevelop: childDev.growdevelop, // 👈
-      serviceType: serviceType,
-      smokeStatus: smokeStatus,     // 👈 เพิ่มบรรทัดนี้
-      alcoholStatus: alcoholStatus, // 👈 เพิ่มบรรทัดนี้
-      smokeAmount: smokeAmount,   // 👈 เพิ่มบรรทัดนี้
-      smokeWake: smokeWake,       // 👈 เพิ่มบรรทัดนี้
-      smokeAdvice: smokeAdvice,   // 👈 เพิ่มบรรทัดนี้
-      alcoholAdvice: alcoholAdvice, // 👈 เพิ่มบรรทัดนี้
-      sugarFastingStatus: sugarFasting, // 👈 เพิ่มบรรทัดนี้ลงไป
-      breastCancerScreening: needBreastCancerScreening, // 👈 ส่งสถานะนี้ไปหลังบ้านตรงๆ เลย
+      isStaff: isStaffLoggedIn,
+      customSymptoms: isStaffLoggedIn ? customSymptoms.trim() : '',
+      customSymptomsco: isStaffLoggedIn ? customSymptomsco.trim() : '',
+      serviceType: isStaffLoggedIn ? 'staff_custom' : serviceType,
+      ageMonths: patient?.age_months,
+      headCircum: vitals.headCircum === '---' ? 0 : parseFloat(vitals.headCircum),
+      nlevel: childDev.nlevel,
+      nlevel2: childDev.nlevel2,
+      nlevel3: childDev.nlevel3,
+      growdevelop: childDev.growdevelop,
+      diagNote: isStaffLoggedIn ? diagNote.trim() : '',
+      timeService: isStaffLoggedIn ? timeService : '1',
+      icd10List: isStaffLoggedIn ? icd10List : [],
+      drugList: isStaffLoggedIn ? drugList : [],
+      smokeStatus: smokeStatus,
+      alcoholStatus: alcoholStatus,
+      smokeAmount: smokeAmount,
+      smokeWake: smokeWake,
+      smokeAdvice: smokeAdvice,
+      alcoholAdvice: alcoholAdvice,
+      sugarFastingStatus: sugarFasting,
+      breastCancerScreening: needBreastCancerScreening,
       weight: vitals.weight === '' || vitals.weight === '---' ? 0 : parseFloat(vitals.weight),
       height: vitals.height === '' || vitals.height === '---' ? 0 : parseFloat(vitals.height),
-      sysDia: vitals.sysDia === '---' ? '' : vitals.sysDia, 
+      sysDia: vitals.sysDia === '---' ? '' : vitals.sysDia,
       pulse: vitals.pulse === '' || vitals.pulse === '---' ? 0 : parseInt(vitals.pulse),
       temp: vitals.temp === '' || vitals.temp === '---' ? 0 : parseFloat(vitals.temp),
       waist: vitals.waist === '' || vitals.waist === '---' ? 0 : parseFloat(vitals.waist),
@@ -1410,8 +1829,6 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
 
   const healthAnalysis = analyzeHealth();
 
-  // 🌟 ตัวแปรเช็คสิทธิ์ (Role-based) สำหรับแยกระหว่าง เจ้าหน้าที่ และ อสม.
-  const isStaffLoggedIn = currentVhv && ['3251000441639', '1259700107058', '1279800022828'].includes(currentVhv.cid);
 
   // 👇 โค้ดเดิมของคุณสิรภพ 👇
 
@@ -2087,45 +2504,155 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
             /* ================= 🧑 โหมดผู้ใหญ่ (> 60 เดือน) ================= */
             <div style={{ background: 'white', padding: '30px', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px rgba(0,0,0,0.04)', maxWidth: '900px', margin: '20px auto' }}>
               
-              {/* 1. โซนปุ่มเลือกประเภทการรับบริการ */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '15px' }}>
-                <button 
-                  type="button" 
-                  onClick={() => setServiceType('health_station')} 
-                  style={{ 
-                    padding: '25px 20px', borderRadius: '15px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'all 0.2s',
-                    border: serviceType === 'health_station' ? '2px solid #0ea5e9' : '1px solid #cbd5e1', 
-                    backgroundColor: serviceType === 'health_station' ? '#f0f9ff' : 'white', 
-                    color: serviceType === 'health_station' ? '#0ea5e9' : '#64748b', 
-                    boxShadow: serviceType === 'health_station' ? '0 4px 15px rgba(14, 165, 233, 0.15)' : 'none' 
-                  }}
-                >
-                  <i className="fa-solid fa-house-chimney-medical" style={{ fontSize: '32px' }}></i>
-                  <span style={{ fontSize: '20px', fontWeight: 'bold' }}>Health Station</span>
-                  <small style={{ fontSize: '14px', opacity: 0.8 }}>ผู้ป่วย NCD กลุ่มสีเขียว</small>
-                </button>
+              {isStaffLoggedIn ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '25px', textAlign: 'left' }}>
+                  
+                  {/* ช่องที่ 1: อาการสำคัญ (symptoms) */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '17px', fontWeight: 'bold', color: '#4f46e5', margin: 0 }}>
+                        <i className="fa-solid fa-file-medical"></i> อาการสำคัญ (CC) <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => { setPresetSearch(''); setNewPresetInput(''); setPresetModalTarget('symptoms'); }}
+                        style={{
+                          padding: '6px 14px',
+                          backgroundColor: '#4f46e5',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '20px',
+                          fontSize: '13px',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 6px rgba(79, 70, 229, 0.3)',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <i className="fa-solid fa-list-ul"></i> ข้อความสำเร็จรูป
+                      </button>
+                    </div>
+                    <textarea
+                      rows={3}
+                      maxLength={255}
+                      value={customSymptoms}
+                      onChange={(e) => setCustomSymptoms(e.target.value)}
+                      placeholder="พิมพ์เอง หรือกดปุ่ม 'ข้อความสำเร็จรูป' ด้านบนเพื่อเลือก..."
+                      style={{
+                        width: '100%',
+                        padding: '14px',
+                        borderRadius: '12px',
+                        border: '2px solid #818cf8',
+                        backgroundColor: '#f8fafc',
+                        fontSize: '16px',
+                        color: '#1e293b',
+                        outline: 'none',
+                        resize: 'vertical',
+                        fontFamily: 'inherit',
+                        boxSizing: 'border-box',
+                        boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.04)'
+                      }}
+                    />
+                  </div>
 
-                <button 
-                  type="button" 
-                  onClick={() => setServiceType('screening')} 
-                  style={{ 
-                    padding: '25px 20px', borderRadius: '15px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'all 0.2s',
-                    border: serviceType === 'screening' ? '2px solid #6366f1' : '1px solid #cbd5e1', 
-                    backgroundColor: serviceType === 'screening' ? '#eef2ff' : 'white', 
-                    color: serviceType === 'screening' ? '#4f46e5' : '#64748b', 
-                    boxShadow: serviceType === 'screening' ? '0 4px 15px rgba(99, 102, 241, 0.15)' : 'none' 
-                  }}
-                >
-                  <i className="fa-solid fa-magnifying-glass-chart" style={{ fontSize: '32px' }}></i>
-                  <span style={{ fontSize: '20px', fontWeight: 'bold' }}>คัดกรอง</span>
-                  <small style={{ fontSize: '14px', opacity: 0.8 }}>เบาหวาน-ความดัน 35 ปีขึ้นไป</small>
-                </button>
-              </div>
+                  {/* ช่องที่ 2: อาการร่วม / ประวัติเจ็บป่วย (symptomsco) */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '17px', fontWeight: 'bold', color: '#0284c7', margin: 0 }}>
+                        <i className="fa-solid fa-notes-medical"></i> อาการร่วม (PI)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => { setPresetSearch(''); setNewPresetInput(''); setPresetModalTarget('symptomsco'); }}
+                        style={{
+                          padding: '6px 14px',
+                          backgroundColor: '#0284c7',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '20px',
+                          fontSize: '13px',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 6px rgba(2, 132, 199, 0.3)',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <i className="fa-solid fa-list-ul"></i> ข้อความสำเร็จรูป
+                      </button>
+                    </div>
+                    <textarea
+                      rows={3}
+                      maxLength={255}
+                      value={customSymptomsco}
+                      onChange={(e) => setCustomSymptomsco(e.target.value)}
+                      placeholder="พิมพ์เอง หรือกดปุ่ม 'ข้อความสำเร็จรูป' ด้านบนเพื่อเลือก..."
+                      style={{
+                        width: '100%',
+                        padding: '14px',
+                        borderRadius: '12px',
+                        border: '2px solid #38bdf8',
+                        backgroundColor: '#f8fafc',
+                        fontSize: '16px',
+                        color: '#1e293b',
+                        outline: 'none',
+                        resize: 'vertical',
+                        fontFamily: 'inherit',
+                        boxSizing: 'border-box',
+                        boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.04)'
+                      }}
+                    />
+                  </div>
 
-              {/* ข้อความ JHCIS */}
-              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '15px', color: '#475569', textAlign: 'center', marginBottom: '25px' }}>
-                <strong>ข้อความที่จะบันทึกเข้า JHCIS:</strong> {serviceType === 'screening' ? 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป' : 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.'}
-              </div>
+                </div>
+              ) : (
+                <>
+                  {/* ปุ่มเลือกเดิมสำหรับ อสม. */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '15px' }}>
+                    <button 
+                      type="button" 
+                      onClick={() => setServiceType('health_station')} 
+                      style={{ 
+                        padding: '25px 20px', borderRadius: '15px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'all 0.2s',
+                        border: serviceType === 'health_station' ? '2px solid #0ea5e9' : '1px solid #cbd5e1', 
+                        backgroundColor: serviceType === 'health_station' ? '#f0f9ff' : 'white', 
+                        color: serviceType === 'health_station' ? '#0ea5e9' : '#64748b', 
+                        boxShadow: serviceType === 'health_station' ? '0 4px 15px rgba(14, 165, 233, 0.15)' : 'none' 
+                      }}
+                    >
+                      <i className="fa-solid fa-house-chimney-medical" style={{ fontSize: '32px' }}></i>
+                      <span style={{ fontSize: '20px', fontWeight: 'bold' }}>Health Station</span>
+                      <small style={{ fontSize: '14px', opacity: 0.8 }}>ผู้ป่วย NCD กลุ่มสีเขียว</small>
+                    </button>
+
+                    <button 
+                      type="button" 
+                      onClick={() => setServiceType('screening')} 
+                      style={{ 
+                        padding: '25px 20px', borderRadius: '15px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'all 0.2s',
+                        border: serviceType === 'screening' ? '2px solid #6366f1' : '1px solid #cbd5e1', 
+                        backgroundColor: serviceType === 'screening' ? '#eef2ff' : 'white', 
+                        color: serviceType === 'screening' ? '#4f46e5' : '#64748b', 
+                        boxShadow: serviceType === 'screening' ? '0 4px 15px rgba(99, 102, 241, 0.15)' : 'none' 
+                      }}
+                    >
+                      <i className="fa-solid fa-magnifying-glass-chart" style={{ fontSize: '32px' }}></i>
+                      <span style={{ fontSize: '20px', fontWeight: 'bold' }}>คัดกรอง</span>
+                      <small style={{ fontSize: '14px', opacity: 0.8 }}>เบาหวาน-ความดัน 35 ปีขึ้นไป</small>
+                    </button>
+                  </div>
+
+                  {/* ข้อความ JHCIS เดิมสำหรับ อสม. */}
+                  <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '15px', color: '#475569', textAlign: 'center', marginBottom: '25px' }}>
+                    <strong>ข้อความที่จะบันทึกเข้า JHCIS:</strong> {serviceType === 'screening' ? 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป' : 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.'}
+                  </div>
+                </>
+              )}
 
               {/* 2. โซนกรอกค่าวัดสัญญาณชีพ (ขอบมนสวยงาม) */}
               <div className="vitals-grid" style={{ marginBottom: '25px' }}>
@@ -2238,10 +2765,345 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                 </div>
 
               </div>
-            </div>
-            )}
 
-          
+              {/* ================= 🩺 โซนวินิจฉัย (ICD-10) และ ยา-เวชภัณฑ์-บริการ-หัตถการ (เฉพาะเจ้าหน้าที่) ================= */}
+              {isStaffLoggedIn && (
+                <div style={{ marginTop: '25px', display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
+
+                  {/* 1. โซนคำวินิจฉัย + ตาราง ICD-10 */}
+                  <div style={{ padding: '20px', borderRadius: '14px', border: '2px solid #c7d2fe', backgroundColor: '#fafbff' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px', alignItems: 'start' }}>
+                      
+                      {/* กล่องคำวินิจฉัย */}
+                      <div>
+                        <label style={{ fontWeight: 'bold', color: '#4338ca', fontSize: '16px', display: 'block', marginBottom: '8px' }}>
+                          <i className="fa-solid fa-stethoscope"></i> คำวินิจฉัย
+                        </label>
+                        <textarea
+                          rows={5}
+                          maxLength={255}
+                          value={diagNote}
+                          onChange={(e) => setDiagNote(e.target.value)}
+                          placeholder="บันทึกคำวินิจฉัยเพิ่มเติม..."
+                          style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #a5b4fc', fontSize: '15px', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none', resize: 'vertical' }}
+                        />
+                      </div>
+
+                      {/* ค้นหาและตาราง ICD-10 */}
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px', flexWrap: 'wrap' }}>
+                          <label style={{ fontWeight: 'bold', color: '#4338ca', fontSize: '16px', margin: 0 }}>
+                            <i className="fa-solid fa-virus"></i> รหัสโรค (ICD-10)
+                          </label>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleSearchIcd10('J00')}
+                              style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 'bold', borderRadius: '8px', border: '1px solid #fda4af', background: '#fff1f2', color: '#e11d48', cursor: 'pointer' }}
+                            >
+                              Hot-diag
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSearchIcd10('I10')}
+                              style={{ padding: '4px 10px', fontSize: '12px', fontWeight: 'bold', borderRadius: '8px', border: '1px solid #c4b5fd', background: '#f5f3ff', color: '#7c3aed', cursor: 'pointer' }}
+                            >
+                              506 / NCD
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* ช่องค้นหา ICD-10 */}
+                        <div style={{ position: 'relative', marginBottom: '10px' }}>
+                          <input
+                            type="text"
+                            value={icdSearch}
+                            onChange={(e) => handleSearchIcd10(e.target.value)}
+                            placeholder="🔍 พิมพ์รหัส ICD-10 หรือชื่อโรคเพื่อเพิ่ม เช่น I10, E11, J00, ปวดหลัง..."
+                            style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '2px solid #818cf8', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }}
+                          />
+                          {icdResults.length > 0 && (
+                            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #cbd5e1', borderRadius: '10px', maxHeight: '220px', overflowY: 'auto', zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.15)' }}>
+                              {icdResults.map((r, i) => (
+                                <div
+                                  key={i}
+                                  onClick={() => handleAddIcd10(r)}
+                                  style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', fontSize: '14px' }}
+                                  onMouseOver={(e) => e.currentTarget.style.background = '#eef2ff'}
+                                  onMouseOut={(e) => e.currentTarget.style.background = 'white'}
+                                >
+                                  <strong style={{ color: '#4f46e5', marginRight: '8px' }}>{r.diseasecode}</strong>
+                                  <span>{r.diseasenamethai || r.diseasename}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ตารางรายการ ICD-10 */}
+                        <div style={{ overflowX: 'auto', background: 'white', borderRadius: '10px', border: '1px solid #cbd5e1' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                            <thead style={{ background: '#e0e7ff', color: '#3730a3' }}>
+                              <tr>
+                                <th style={{ padding: '8px', textAlign: 'left' }}>ICD10</th>
+                                <th style={{ padding: '8px' }}>ลำดับสำคัญ</th>
+                                <th style={{ padding: '8px' }}>ต่อเนื่อง?</th>
+                                <th style={{ padding: '8px' }}>วันนัด</th>
+                                <th style={{ padding: '8px' }}>ลบ</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {icd10List.length === 0 ? (
+                                <tr><td colSpan={5} style={{ padding: '14px', textAlign: 'center', color: '#94a3b8' }}>ยังไม่ได้เลือกรหัสโรค ICD-10</td></tr>
+                              ) : icd10List.map((row, idx) => (
+                                <tr key={idx} style={{ borderTop: '1px solid #e2e8f0' }}>
+                                  <td style={{ padding: '8px', textAlign: 'left' }}>
+                                    <strong style={{ color: '#4f46e5' }}>{row.diagcode}</strong>
+                                    <div style={{ fontSize: '12px', color: '#475569' }}>{row.diseasename}</div>
+                                  </td>
+                                  <td style={{ padding: '8px', textAlign: 'center' }}>
+                                    <select
+                                      value={row.dxtype}
+                                      onChange={(e) => setIcd10List(prev => prev.map((x, i) => i === idx ? { ...x, dxtype: e.target.value } : x))}
+                                      style={{ padding: '4px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
+                                    >
+                                      <option value="01">01 โรคหลัก</option>
+                                      <option value="02">02 โรคร่วม</option>
+                                      <option value="04">04 โรคแทรก</option>
+                                      <option value="05">05 อื่นๆ</option>
+                                    </select>
+                                  </td>
+                                  <td style={{ padding: '8px', textAlign: 'center' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={row.conti === '1'}
+                                      onChange={(e) => setIcd10List(prev => prev.map((x, i) => i === idx ? { ...x, conti: e.target.checked ? '1' : '0' } : x))}
+                                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '8px', textAlign: 'center' }}>
+                                    <input
+                                      type="date"
+                                      value={row.appointDate}
+                                      onChange={(e) => setIcd10List(prev => prev.map((x, i) => i === idx ? { ...x, appointDate: e.target.value } : x))}
+                                      style={{ padding: '4px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px' }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '8px', textAlign: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setIcd10List(prev => prev.filter((_, i) => i !== idx))}
+                                      style={{ background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontWeight: 'bold' }}
+                                    >
+                                      ✕
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* 2. โซน ยา-เวชภัณฑ์-บริการ-หัตถการ-ทันตกรรม ฯลฯ */}
+                  <div style={{ padding: '20px', borderRadius: '14px', border: '2px solid #bae6fd', backgroundColor: '#f8fcff' }}>
+                    <div style={{ fontWeight: 'bold', color: '#0369a1', fontSize: '17px', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                      <span><i className="fa-solid fa-pills"></i> ยา-เวชภัณฑ์-บริการ-หัตถการ-ทันตกรรม ฯลฯ</span>
+                      <span style={{ fontSize: '15px', color: '#059669', background: '#d1fae5', padding: '4px 12px', borderRadius: '20px' }}>
+                        รวมเงินทั้งหมด: {drugList.reduce((sum, d) => sum + (d.unit * d.realprice), 0).toFixed(2)} บาท
+                      </span>
+                    </div>
+
+                    {/* แถบปุ่มเครื่องมือด้านบน */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+                      <button
+                        type="button"
+                        onClick={handleReMed}
+                        style={{ padding: '7px 14px', background: '#0284c7', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }}
+                      >
+                        <i className="fa-solid fa-rotate-left"></i> Re Med.
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const msg = drugAllergies.length > 0
+                            ? drugAllergies.map(a => a.drugname).join(', ')
+                            : 'ไม่พบประวัติแพ้ยาในระบบ (กด Re Med. เพื่อโหลดข้อมูลจาก JHCIS)';
+                          Swal.fire('ประวัติแพ้ยา', msg, drugAllergies.length > 0 ? 'warning' : 'info');
+                        }}
+                        style={{ padding: '7px 12px', background: drugAllergies.length > 0 ? '#ef4444' : '#fee2e2', color: drugAllergies.length > 0 ? 'white' : '#dc2626', border: '1px solid #fca5a5', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }}
+                      >
+                        แพ้ยาฯ {drugAllergies.length > 0 ? `(${drugAllergies.length})` : ''}
+                      </button>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ color: '#dc2626', fontSize: '13px', fontWeight: 'bold' }}>แพ้อาหาร:</span>
+                        <input
+                          type="text"
+                          value={foodAllergy}
+                          onChange={(e) => setFoodAllergy(e.target.value)}
+                          placeholder="ระบุ (ถ้ามี)"
+                          style={{ width: '110px', padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                        />
+                      </div>
+
+                      {/* ปุ่มสลับหมวดค้นหา */}
+                      {[
+                        { id: 'all', label: 'ทั้งหมด' },
+                        { id: 'herb', label: 'โรค/ยาสมุนไพร' },
+                        { id: 'service', label: 'บริการ & หัตถการ' },
+                        { id: 'adp', label: 'เบิก ADP' },
+                        { id: 'dental', label: 'ทันตฯ' }
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => { setDrugCategory(tab.id as any); handleSearchDrug(drugSearch, tab.id as any); }}
+                          style={{
+                            padding: '7px 12px',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            border: drugCategory === tab.id ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                            background: drugCategory === tab.id ? '#e0f2fe' : 'white',
+                            color: drugCategory === tab.id ? '#0369a1' : '#334155'
+                          }}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+
+                      {/* ปุ่ม ในเวลา / นอกเวลา */}
+                      <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid #cbd5e1', marginLeft: 'auto' }}>
+                        <button
+                          type="button"
+                          onClick={() => setTimeService('1')}
+                          style={{ padding: '6px 12px', border: 'none', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', background: timeService === '1' ? '#ef4444' : 'white', color: timeService === '1' ? 'white' : '#64748b' }}
+                        >
+                          ในเวลา
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTimeService('2')}
+                          style={{ padding: '6px 12px', border: 'none', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', background: timeService === '2' ? '#f97316' : 'white', color: timeService === '2' ? 'white' : '#64748b' }}
+                        >
+                          นอกเวลา
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* ช่องค้นหายา/หัตถการ */}
+                    <div style={{ position: 'relative', marginBottom: '10px' }}>
+                      <input
+                        type="text"
+                        value={drugSearch}
+                        onChange={(e) => handleSearchDrug(e.target.value)}
+                        placeholder="🔍 ค้นหาชื่อยา / ยาสมุนไพร / หัตถการ / รหัสยา เพื่อเพิ่มลงตาราง..."
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '2px solid #38bdf8', fontSize: '14px', boxSizing: 'border-box', outline: 'none' }}
+                      />
+                      {drugResults.length > 0 && (
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #cbd5e1', borderRadius: '10px', maxHeight: '240px', overflowY: 'auto', zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.15)' }}>
+                          {drugResults.map((d, i) => (
+                            <div
+                              key={i}
+                              onClick={() => handleAddDrug(d)}
+                              style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}
+                              onMouseOver={(e) => e.currentTarget.style.background = '#f0f9ff'}
+                              onMouseOut={(e) => e.currentTarget.style.background = 'white'}
+                            >
+                              <span><strong style={{ color: '#0284c7', marginRight: '8px' }}>{d.drugcode}</strong>{d.drugname}</span>
+                              <span style={{ color: '#059669', fontWeight: 'bold' }}>{Number(d.realprice).toFixed(2)} บ./{d.unitsell || 'หน่วย'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ตารางรายการยาและหัตถการ */}
+                    <div style={{ overflowX: 'auto', background: 'white', borderRadius: '10px', border: '1px solid #cbd5e1' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '720px' }}>
+                        <thead style={{ background: '#e2e8f0', color: '#1e293b' }}>
+                          <tr>
+                            <th style={{ padding: '9px', textAlign: 'left' }}>ชื่อยาฯ / บริการ</th>
+                            <th style={{ padding: '9px', width: '70px' }}>จำนวน</th>
+                            <th style={{ padding: '9px', width: '80px' }}>ขาย/หน่วย</th>
+                            <th style={{ padding: '9px', width: '80px' }}>รวมเงิน</th>
+                            <th style={{ padding: '9px', textAlign: 'left' }}>วิธีใช้ยา</th>
+                            <th style={{ padding: '9px', color: '#dc2626' }}>ผู้บันทึก</th>
+                            <th style={{ padding: '9px', width: '75px' }}>ราคาทุน</th>
+                            <th style={{ padding: '9px', width: '45px' }}>ลบ</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {drugList.length === 0 ? (
+                            <tr><td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8' }}>ยังไม่มีรายการยาหรือหัตถการ (พิมพ์ค้นหาด้านบน หรือกด Re Med.)</td></tr>
+                          ) : drugList.map((drug, idx) => (
+                            <tr key={idx} style={{ borderTop: '1px solid #e2e8f0' }}>
+                              <td style={{ padding: '8px', textAlign: 'left', fontWeight: 'bold', color: '#1e293b' }}>
+                                {drug.drugname}
+                                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'normal' }}>{drug.drugcode}</div>
+                              </td>
+                              <td style={{ padding: '6px', textAlign: 'center' }}>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={drug.unit}
+                                  onChange={(e) => setDrugList(prev => prev.map((x, i) => i === idx ? { ...x, unit: Math.max(1, Number(e.target.value) || 1) } : x))}
+                                  style={{ width: '58px', padding: '5px', textAlign: 'center', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                />
+                              </td>
+                              <td style={{ padding: '6px', textAlign: 'right' }}>
+                                <input
+                                  type="number"
+                                  value={drug.realprice}
+                                  onChange={(e) => setDrugList(prev => prev.map((x, i) => i === idx ? { ...x, realprice: Number(e.target.value) || 0 } : x))}
+                                  style={{ width: '68px', padding: '5px', textAlign: 'right', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                />
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#059669' }}>
+                                {(drug.unit * drug.realprice).toFixed(2)}
+                              </td>
+                              <td style={{ padding: '6px' }}>
+                                <input
+                                  type="text"
+                                  value={drug.dose}
+                                  onChange={(e) => setDrugList(prev => prev.map((x, i) => i === idx ? { ...x, dose: e.target.value } : x))}
+                                  placeholder="เช่น 1 เม็ด หลังอาหาร เช้า-เย็น"
+                                  style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                                />
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'center', fontSize: '12px', color: '#475569' }}>
+                                {drug.recorder}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'right', color: '#64748b' }}>
+                                {drug.costprice.toFixed(2)}
+                              </td>
+                              <td style={{ padding: '6px', textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setDrugList(prev => prev.filter((_, i) => i !== idx))}
+                                  style={{ background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontWeight: 'bold' }}
+                                >
+                                  ✕
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+          )}
 
           <div className="assessment-section" style={{ position: 'relative', zIndex: 20, padding: '20px', background: 'white', borderRadius: '15px', marginTop: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', textAlign: 'left' }}>
             <div className="assessment-title" style={{ fontSize: '20px', fontWeight: 'bold', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '15px', color: '#1F2937' }}>
@@ -2689,6 +3551,167 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
           </div>
         </div>
       )}
+{/* 📋 Modal: เลือกและเพิ่มข้อความสำเร็จรูป (ใช้ร่วมกันทั้งช่อง อาการสำคัญ และ อาการร่วม) */}
+      {presetModalTarget && (() => {
+        const isCC = presetModalTarget === 'symptoms';
+        const themeColor = isCC ? '#4f46e5' : '#0284c7';
+        const lightBg = isCC ? '#eef2ff' : '#f0f9ff';
+        const borderColor = isCC ? '#c7d2fe' : '#bae6fd';
+        const currentValue = isCC ? customSymptoms : customSymptomsco;
+        const setCurrentValue = isCC ? setCustomSymptoms : setCustomSymptomsco;
+        const activeList = isCC ? symptomsPresets : symptomscoPresets;
+
+        return (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0, 0, 0, 0.65)', zIndex: 5500, backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: 'white', borderRadius: '20px', padding: '25px', width: '94%', maxWidth: '820px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+              
+              {/* หัวข้อ */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '12px', marginBottom: '15px' }}>
+                <h3 style={{ margin: 0, color: themeColor, fontSize: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <i className={isCC ? 'fa-solid fa-file-medical' : 'fa-solid fa-clipboard-list'}></i>
+                  {isCC ? 'ข้อความสำเร็จรูป (อาการสำคัญ - CC)' : 'ข้อความสำเร็จรูป (อาการร่วม - PI)'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setPresetModalTarget(null)}
+                  style={{ background: '#f1f5f9', border: 'none', width: '36px', height: '36px', borderRadius: '50%', cursor: 'pointer', color: '#64748b', fontSize: '18px' }}
+                >
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+
+              {/* พรีวิวข้อความที่เลือกไว้ */}
+              <div style={{ marginBottom: '14px', background: lightBg, padding: '12px', borderRadius: '12px', border: `1px solid ${borderColor}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 'bold', color: themeColor }}>ข้อความที่เลือกไว้ (แตะหลายรายการเพื่อต่อข้อความได้):</span>
+                  {currentValue && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentValue('')}
+                      style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '3px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                      ล้างข้อความ
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  rows={2}
+                  maxLength={255}
+                  value={currentValue}
+                  onChange={(e) => setCurrentValue(e.target.value)}
+                  placeholder="ยังไม่ได้เลือกข้อความ..."
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: `1px solid ${themeColor}`, fontSize: '15px', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none', resize: 'none' }}
+                />
+              </div>
+
+              {/* ช่องเพิ่มข้อความสำเร็จรูปใหม่ด้วยตัวเอง */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+                <input
+                  type="text"
+                  value={newPresetInput}
+                  onChange={(e) => setNewPresetInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddPreset(); } }}
+                  placeholder="➕ พิมพ์ข้อความสำเร็จรูปใหม่ที่ต้องการเก็บไว้ใช้ประจำ..."
+                  style={{ flex: 1, padding: '10px 14px', borderRadius: '10px', border: '2px solid #a7f3d0', fontSize: '15px', outline: 'none', background: '#f0fdf4' }}
+                />
+                <button
+                  type="button"
+                  onClick={handleAddPreset}
+                  style={{ padding: '10px 20px', background: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  <i className="fa-solid fa-plus"></i> เพิ่มใหม่
+                </button>
+              </div>
+
+              {/* ช่องค้นหารายการ */}
+              <div style={{ position: 'relative', marginBottom: '12px' }}>
+                <i className="fa-solid fa-magnifying-glass" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}></i>
+                <input
+                  type="text"
+                  value={presetSearch}
+                  onChange={(e) => setPresetSearch(e.target.value)}
+                  placeholder="ค้นหาข้อความสำเร็จรูป เช่น คัดกรอง, วัคซีน, เยี่ยมบ้าน, DSPM, แผนไทย..."
+                  style={{ width: '100%', padding: '10px 14px 10px 40px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '15px', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* รายการข้อความสำเร็จรูปทั้งหมด */}
+              <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '10px', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {activeList
+                  .filter(item => item.toLowerCase().includes(presetSearch.trim().toLowerCase()))
+                  .map((item, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        background: 'white',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleSelectPreset(item)}
+                        style={{
+                          flex: 1,
+                          textAlign: 'left',
+                          background: 'transparent',
+                          border: 'none',
+                          fontSize: '15px',
+                          color: '#1e293b',
+                          cursor: 'pointer',
+                          padding: '2px 0',
+                          fontFamily: 'inherit'
+                        }}
+                      >
+                        <i className="fa-solid fa-circle-plus" style={{ color: themeColor, marginRight: '8px' }}></i>
+                        {item}
+                      </button>
+                      <button
+                        type="button"
+                        title="ลบข้อความนี้"
+                        onClick={() => {
+                          if (window.confirm(`ต้องการลบข้อความ "${item}" ออกจากรายการหรือไม่?`)) {
+                            handleDeletePreset(item);
+                          }
+                        }}
+                        style={{
+                          background: '#fef2f2',
+                          color: '#ef4444',
+                          border: 'none',
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          flexShrink: 0
+                        }}
+                      >
+                        <i className="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
+                  ))}
+              </div>
+
+              {/* ปุ่มด้านล่าง */}
+              <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPresetModalTarget(null)}
+                  style={{ padding: '12px 35px', background: themeColor, color: 'white', border: 'none', borderRadius: '50px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.18)' }}
+                >
+                  <i className="fa-solid fa-check"></i> เสร็จสิ้น
+                </button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>  
   );
