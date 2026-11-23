@@ -1,0 +1,799 @@
+/* iPadOS Clinical Workspace Theme (Self-contained CSS) */
+.ios-ws-root {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: #F2F2F7;
+  color: #000000;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "IBM Plex Sans Thai", "Prompt", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-align: left;
+}
+
+.ios-ws-root *, .ios-ws-root *::before, .ios-ws-root *::after {
+  box-sizing: border-box;
+}
+
+/* Mobile backdrop for sidebar */
+.ios-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(2px);
+  z-index: 520;
+}
+
+/* Split View Sidebar */
+.ios-sidebar {
+  width: 310px;
+  flex-shrink: 0;
+  background: #F2F2F7;
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), margin-left 0.28s ease;
+  z-index: 530;
+}
+
+.ios-sidebar.collapsed-desktop {
+  margin-left: -310px;
+}
+
+@media (max-width: 1023px) {
+  .ios-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  }
+  .ios-sidebar.open-mobile {
+    transform: translateX(0);
+  }
+  .ios-sidebar.collapsed-desktop {
+    margin-left: 0;
+  }
+}
+
+.ios-sidebar-header {
+  padding: 16px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.ios-sidebar-toprow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ios-hosp-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(60, 60, 67, 0.6);
+}
+
+.ios-sidebar-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #000;
+  line-height: 1.2;
+}
+
+.ios-circle-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: #007AFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.ios-circle-btn:hover { background: rgba(0, 0, 0, 0.04); }
+.ios-circle-btn:active { transform: scale(0.94); }
+
+.ios-search-wrap {
+  position: relative;
+}
+
+.ios-search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(60, 60, 67, 0.48);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.ios-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 34px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(120, 120, 128, 0.12);
+  font-size: 14px;
+  color: #000;
+  outline: none;
+  font-family: inherit;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.ios-search-input:focus {
+  background: #FFFFFF;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.25);
+}
+
+/* Segmented Control */
+.ios-segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 2px;
+  border-radius: 9px;
+  background: rgba(120, 120, 128, 0.12);
+}
+
+.ios-seg-btn {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(60, 60, 67, 0.72);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.16s;
+  white-space: nowrap;
+}
+
+.ios-seg-btn.active {
+  background: #FFFFFF;
+  color: #000000;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.ios-seg-count {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-left: 3px;
+}
+
+/* Queue list */
+.ios-queue-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ios-queue-item {
+  width: 100%;
+  border: none;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #000;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.12s;
+}
+
+.ios-queue-item:hover { background: #FFFFFF; }
+.ios-queue-item.active {
+  background: #007AFF;
+  color: #FFFFFF;
+}
+
+.ios-queue-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: #F2F2F7;
+  color: #007AFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ios-queue-item.active .ios-queue-avatar {
+  background: rgba(255, 255, 255, 0.22);
+  color: #FFFFFF;
+}
+
+.ios-queue-meta {
+  font-size: 12px;
+  color: rgba(60, 60, 67, 0.62);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ios-queue-item.active .ios-queue-meta {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.ios-sidebar-footer {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: rgba(60, 60, 67, 0.72);
+}
+
+/* Main Column */
+.ios-main-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #F2F2F7;
+  position: relative;
+}
+
+/* Frosted Translucent Navigation Bar */
+.ios-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(242, 242, 247, 0.85);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  flex-shrink: 0;
+}
+
+.ios-navbar-inner {
+  height: 56px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ios-nav-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: #007AFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ios-nav-btn:hover { background: rgba(0, 0, 0, 0.05); }
+
+.ios-save-btn {
+  padding: 8px 18px;
+  border-radius: 9999px;
+  border: none;
+  background: #007AFF;
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.12s;
+}
+.ios-save-btn:hover { background: #0062CC; }
+.ios-save-btn:active { transform: scale(0.96); }
+
+.ios-compact-title {
+  transition: opacity 0.2s, transform 0.2s;
+  min-width: 0;
+}
+.ios-compact-title.hidden-title {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+}
+
+/* Popover menu */
+.ios-popover {
+  position: absolute;
+  right: 0;
+  top: 46px;
+  width: 245px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: saturate(180%) blur(28px);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  z-index: 600;
+}
+
+.ios-popover-item {
+  width: 100%;
+  border: none;
+  border-top: 0.5px solid rgba(60, 60, 67, 0.14);
+  background: transparent;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  color: #000;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.ios-popover-item:first-child { border-top: none; }
+.ios-popover-item:hover { background: rgba(0, 0, 0, 0.04); }
+.ios-popover-item.danger { color: #FF3B30; }
+
+/* Main Scroll Canvas */
+.ios-main-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.ios-canvas {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 20px 24px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+@media (max-width: 640px) {
+  .ios-canvas { padding: 14px 14px 64px; }
+}
+
+/* Patient Large Header */
+.ios-patient-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ios-avatar-lg {
+  width: 58px;
+  height: 58px;
+  border-radius: 9999px;
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  color: #007AFF;
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.ios-avatar-lg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ios-patient-name {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #000;
+  line-height: 1.2;
+}
+
+.ios-patient-sub {
+  margin: 3px 0 0;
+  font-size: 13.5px;
+  color: rgba(60, 60, 67, 0.72);
+}
+
+/* Pills */
+.ios-pill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.ios-pill {
+  padding: 7px 14px;
+  border-radius: 9999px;
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 13px;
+  font-weight: 500;
+  color: #000;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.12s;
+}
+.ios-pill:hover { background: rgba(0, 0, 0, 0.03); }
+.ios-pill:active { transform: scale(0.96); }
+.ios-pill.danger {
+  background: rgba(255, 59, 48, 0.1);
+  border-color: rgba(255, 59, 48, 0.22);
+  color: #D70015;
+  font-weight: 600;
+}
+.ios-pill.blue { color: #007AFF; font-weight: 600; }
+.ios-pill.green {
+  background: rgba(52, 199, 89, 0.13);
+  border-color: rgba(52, 199, 89, 0.22);
+  color: #1E8E3E;
+  font-weight: 600;
+}
+
+/* Section Headers & Inset Grouped Cards */
+.ios-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  margin-bottom: 7px;
+  gap: 8px;
+}
+
+.ios-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(60, 60, 67, 0.62);
+}
+
+.ios-link-btn {
+  border: none;
+  background: transparent;
+  color: #007AFF;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-family: inherit;
+}
+.ios-link-btn:hover { opacity: 0.72; }
+
+.ios-card {
+  background: #FFFFFF;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.ios-row {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+}
+
+.ios-row + .ios-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 0;
+  height: 0.5px;
+  background: rgba(60, 60, 67, 0.16);
+}
+
+@media (max-width: 640px) {
+  .ios-row.stack-mobile {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+}
+
+.ios-row-label {
+  width: 135px;
+  flex-shrink: 0;
+  font-size: 15px;
+  color: rgba(60, 60, 67, 0.78);
+  font-weight: 500;
+}
+
+.ios-field-input, .ios-field-textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  color: #000000;
+  outline: none;
+  font-family: inherit;
+}
+
+.ios-field-textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* 4-column Vital Signs Metric Grid */
+.ios-vitals-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 0.5px solid rgba(60, 60, 67, 0.14);
+}
+
+@media (max-width: 720px) {
+  .ios-vitals-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.ios-vital-box {
+  padding: 14px;
+  border-right: 0.5px solid rgba(60, 60, 67, 0.12);
+  border-bottom: 0.5px solid rgba(60, 60, 67, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ios-vital-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(60, 60, 67, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ios-vital-num {
+  font-size: 21px;
+  font-weight: 600;
+  color: #000;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+  width: 100%;
+  font-family: inherit;
+}
+.ios-vital-num:focus { color: #007AFF; }
+
+.ios-disclosure-row {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 13px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.15s;
+}
+.ios-disclosure-row:hover { background: rgba(0, 0, 0, 0.02); }
+
+/* Add Row Button */
+.ios-add-row {
+  width: 100%;
+  border: none;
+  border-top: 0.5px solid rgba(60, 60, 67, 0.14);
+  background: transparent;
+  padding: 13px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #007AFF;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.ios-add-row:hover { background: rgba(0, 122, 255, 0.04); }
+
+.ios-plus-dot {
+  width: 21px;
+  height: 21px;
+  border-radius: 9999px;
+  background: #007AFF;
+  color: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* Code Badge & UIStepper */
+.ios-code-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 122, 255, 0.1);
+  color: #007AFF;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ios-stepper {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 9px;
+  background: rgba(120, 120, 128, 0.12);
+}
+
+.ios-step-btn {
+  width: 30px;
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #000;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ios-step-btn:hover { background: #FFFFFF; }
+
+.ios-step-val {
+  width: 38px;
+  text-align: center;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.ios-del-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  border: none;
+  background: transparent;
+  color: rgba(60, 60, 67, 0.42);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ios-del-btn:hover {
+  background: rgba(255, 59, 48, 0.1);
+  color: #FF3B30;
+}
+
+.ios-card-footer {
+  padding: 13px 16px;
+  background: #FAFAFC;
+  border-top: 0.5px solid rgba(60, 60, 67, 0.14);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* iPadOS Page Sheet Modal */
+.ios-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(3px);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+@media (max-width: 640px) {
+  .ios-sheet-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+}
+
+.ios-sheet {
+  width: 100%;
+  max-width: 580px;
+  max-height: 88dvh;
+  background: #F2F2F7;
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: iosSheetIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (max-width: 640px) {
+  .ios-sheet {
+    border-radius: 20px 20px 0 0;
+  }
+}
+
+@keyframes iosSheetIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.ios-sheet-header {
+  padding: 13px 16px;
+  background: #F9F9FB;
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ios-sheet-body {
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Status Dots */
+.ios-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.ios-dot.green { background: #34C759; }
+.ios-dot.orange { background: #FF9500; }
+.ios-dot.red { background: #FF3B30; }
+.ios-dot.blue { background: #007AFF; }
+
+.ios-desktop-seg { display: grid; }
+.ios-mobile-seg { display: none; padding: 0 14px 10px; }
+
+@media (max-width: 767px) {
+  .ios-desktop-seg { display: none; }
+  .ios-mobile-seg { display: block; }
+}

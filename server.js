@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
 import fs from 'fs';
@@ -42,12 +42,12 @@ const checkApiKey = (req, res, next) => {
     else res.status(401).json({ success: false, message: 'Unauthorized' });
 };
 
-// ==========================================
-// API 1: บันทึกเข้าคิว JHCIS (อัปเกรด โภชนาการเด็ก + อาการสำคัญ)
+// // ==========================================
+// API 1: บันทึกเข้าคิว JHCIS (รองรับ เด็ก + เจ้าหน้าที่ + ICD-10 + ยา/หัตถการ + SpecialPP)
 // ==========================================
 app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
-    const data = req.body || {}; 
-    
+    const data = req.body || {};
+
     if (!data.cid || String(data.cid).length !== 13) {
         return res.status(400).json({ success: false, message: 'รูปแบบเลขประจำตัวประชาชนไม่ถูกต้อง' });
     }
@@ -55,16 +55,18 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
     let connection;
     try {
         connection = await mysql.createConnection(dbConfig);
-        
+
         const [personRows] = await connection.execute(
-            'SELECT pid, pcucodeperson, rightcode, rightno, sex FROM person WHERE idcard = ? LIMIT 1', 
+            'SELECT pid, pcucodeperson, rightcode, rightno, sex FROM person WHERE idcard = ? LIMIT 1',
             [data.cid]
         );
-        
-        if (personRows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล' });
+
+        if (personRows.length === 0) {
+            return res.status(404).json({ success: false, message: 'ไม่พบข้อมูลผู้ป่วยในระบบ JHCIS' });
+        }
         const p = personRows[0];
-        
-        const [maxRows] = await connection.execute('SELECT MAX(visitno) as mx FROM visit');
+
+        const [maxRows] = await connection.execute('SELECT MAX(visitno) AS mx FROM visit');
         const vno = (maxRows[0].mx || 0) + 1;
 
         const weight = parseFloat(data.weight) || 0;
@@ -74,19 +76,40 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
         const temp = parseFloat(data.temp) || 0;
         const waist = parseFloat(data.waist) || 0;
         const sugar = parseFloat(data.sugar) || 0;
-        // 👈 ดึงสถานะงดอาหารมาประกอบร่างข้อความ (ถ้ามี)
+
         const fastingText = data.sugarFastingStatus ? ` (${data.sugarFastingStatus})` : '';
         const vitalCheckText = sugar > 0 ? `DTX: ${sugar} mg/dL${fastingText}` : '';
-        
-        autoSymptomsco = '';
+
+        // ✅ กำหนดข้อความ อาการสำคัญ (symptoms) และ อาการร่วม (symptomsco) ตามประเภทผู้ใช้
+        let autoSymptoms = '';
+        let autoSymptomsco = '';
+
+        if (data.ageMonths !== undefined && data.ageMonths !== null && Number(data.ageMonths) <= 60) {
+            autoSymptoms = 'ตรวจภาวะโภชนาการเด็ก 0-60 เดือน';
+            autoSymptomsco = `ตรวจกระตุ้นพัฒนาการ อายุ ${data.ageMonths} เดือน สมวัย`;
+        } else if (data.isStaff || data.serviceType === 'staff_custom') {
+            autoSymptoms = String(data.customSymptoms || '').trim().substring(0, 255);
+            autoSymptomsco = String(data.customSymptomsco || '').trim().substring(0, 255);
+        } else if (data.serviceType === 'screening') {
+            autoSymptoms = 'คัดกรอง เบาหวาน-ความดันโลหิตสูง อายุ 35 ปี ขึ้นไป';
+            autoSymptomsco = '';
+        } else {
+            autoSymptoms = 'ผู้ป่วย NCD กลุ่มสีเขียว รับบริการที่ health station ประจำหมู่บ้าน โดย อสม.';
+            autoSymptomsco = '';
+        }
 
         const timeService = data.timeService === '2' ? '2' : '1'; // 1 = ในเวลา, 2 = นอกเวลา
         const diagNote = String(data.diagNote || '').trim().substring(0, 255);
+        const staffUser = String(data.vhv_cid || 'kiosk').substring(0, 30);
 
+        // 1. บันทึกหัว Visit
         const sqlVisit = `
-            INSERT INTO visit 
-            (pcucode, visitno, visitdate, pcucodeperson, pid, weight, height, pressure, pulse, temperature, waist, rightcode, rightno, timeservice, vitalcheck, symptoms, symptomsco, diagnote) 
-            VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO visit (
+                pcucode, visitno, visitdate, pcucodeperson, pid,
+                weight, height, pressure, pulse, temperature, waist,
+                rightcode, rightno, timeservice, vitalcheck,
+                symptoms, symptomsco, diagnote
+            ) VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         await connection.execute(sqlVisit, [
             p.pcucodeperson, vno, p.pcucodeperson, p.pid,
@@ -95,35 +118,39 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
             autoSymptoms, autoSymptomsco, diagNote
         ]);
 
-        // ✅ บันทึกรหัสโรค ICD-10 (ตาราง visitdiag) และวันนัด (ตาราง visitdiagappoint)
+        // 2. บันทึกรหัสโรค ICD-10 (ตาราง visitdiag) และวันนัด (ตาราง visitdiagappoint)
         if (Array.isArray(data.icd10List) && data.icd10List.length > 0) {
             for (const item of data.icd10List) {
-                if (!item.diagcode) continue;
+                const diagCode = String(item.diagcode || '').trim().toUpperCase();
+                if (!diagCode) continue;
                 try {
                     await connection.execute(
                         `INSERT INTO visitdiag (pcucode, visitno, diagcode, dxtype, dateupdate)
                          VALUES (?, ?, ?, ?, NOW())
                          ON DUPLICATE KEY UPDATE dxtype = VALUES(dxtype), dateupdate = NOW()`,
-                        [p.pcucodeperson, vno, item.diagcode, item.dxtype || '01']
+                        [p.pcucodeperson, vno, diagCode, item.dxtype || '01']
                     );
-                    // อัปเดตสถานะต่อเนื่อง (ถ้าฐานข้อมูลมีคอลัมน์ conti)
+
                     if (item.conti) {
                         try {
                             await connection.execute(
                                 'UPDATE visitdiag SET conti = ? WHERE pcucode = ? AND visitno = ? AND diagcode = ?',
-                                [item.conti, p.pcucodeperson, vno, item.diagcode]
+                                [item.conti, p.pcucodeperson, vno, diagCode]
                             );
                         } catch (e) {}
                     }
-                    // บันทึกวันนัด (ถ้าเจ้าหน้าที่ระบุวันนัด)
+
                     if (item.appointDate) {
                         try {
                             await connection.execute(
-                                `INSERT INTO visitdiagappoint (pcucode, visitno, appodate, appotype, comment, diagcode)
-                                 VALUES (?, ?, ?, '1', ?, ?)`,
-                                [p.pcucodeperson, vno, item.appointDate, diagNote || 'นัดตรวจติดตาม', item.diagcode]
+                                `INSERT INTO visitdiagappoint (pcucode, visitno, diagcode, appodate, appotype, comment)
+                                 VALUES (?, ?, ?, ?, '1', ?)
+                                 ON DUPLICATE KEY UPDATE appodate = VALUES(appodate), comment = VALUES(comment)`,
+                                [p.pcucodeperson, vno, diagCode, item.appointDate, diagNote || 'นัดตรวจติดตาม']
                             );
-                        } catch (e) {}
+                        } catch (appErr) {
+                            console.error('🔥 Warning visitdiagappoint:', appErr.message);
+                        }
                     }
                 } catch (diagErr) {
                     console.error('🔥 Warning visitdiag:', diagErr.message);
@@ -131,7 +158,37 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
             }
         }
 
-        // ✅ บันทึกรายการยา / เวชภัณฑ์ / สมุนไพร / หัตถการ (ตาราง visitdrug)
+        // 3. บันทึกรายการยา / เวชภัณฑ์ / สมุนไพร / หัตถการ (ตาราง visitdrug)
+        if (Array.isArray(data.drugList) && data.drugList.length > 0) {
+            for (const drug of data.drugList) {
+                const drugCode = String(drug.drugcode || '').trim();
+                if (!drugCode) continue;
+                try {
+                    const qty = parseFloat(drug.unit) || 1;
+                    const sellPrice = parseFloat(drug.realprice) || 0;
+                    const costPrice = parseFloat(drug.costprice) || 0;
+                    await connection.execute(
+                        `INSERT INTO visitdrug (pcucode, visitno, drugcode, unit, costprice, realprice, dose, dateupdate)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+                         ON DUPLICATE KEY UPDATE
+                            unit = VALUES(unit),
+                            costprice = VALUES(costprice),
+                            realprice = VALUES(realprice),
+                            dose = VALUES(dose),
+                            dateupdate = NOW()`,
+                        [
+                            p.pcucodeperson, vno, drugCode,
+                            qty, costPrice, sellPrice,
+                            String(drug.dose || '').substring(0, 255)
+                        ]
+                    );
+                } catch (drugErr) {
+                    console.error('🔥 Warning visitdrug:', drugErr.message);
+                }
+            }
+        }
+
+        // 3. บันทึกรายการยา / เวชภัณฑ์ / สมุนไพร / หัตถการ (ตาราง visitdrug)
         if (Array.isArray(data.drugList) && data.drugList.length > 0) {
             for (const drug of data.drugList) {
                 if (!drug.drugcode) continue;
@@ -140,48 +197,134 @@ app.post('/jhcis-api/queue', checkApiKey, async (req, res) => {
                     const sellPrice = parseFloat(drug.realprice) || 0;
                     const costPrice = parseFloat(drug.costprice) || 0;
                     await connection.execute(
-                        `INSERT INTO visitdrug (pcucode, visitno, drugcode, unit, costprice, realprice, dose, dateupdate)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-                         ON DUPLICATE KEY UPDATE unit = VALUES(unit), realprice = VALUES(realprice), dose = VALUES(dose), dateupdate = NOW()`,
-                        [p.pcucodeperson, vno, drug.drugcode, qty, costPrice, sellPrice, String(drug.dose || '').substring(0, 255)]
+                        `INSERT INTO visitdrug (
+                            pcucode, visitno, drugcode, unit, costprice, realprice, dose, doctor1, dateupdate
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                        ON DUPLICATE KEY UPDATE
+                            unit = VALUES(unit),
+                            costprice = VALUES(costprice),
+                            realprice = VALUES(realprice),
+                            dose = VALUES(dose),
+                            doctor1 = VALUES(doctor1),
+                            dateupdate = NOW()`,
+                        [
+                            p.pcucodeperson, vno, drug.drugcode,
+                            qty, costPrice, sellPrice,
+                            String(drug.dose || '').substring(0, 255),
+                            staffUser
+                        ]
                     );
                 } catch (drugErr) {
                     console.error('🔥 Warning visitdrug:', drugErr.message);
                 }
             }
         }
+
+        // 4. บันทึกค่าน้ำตาลในเลือด (DTX)
         if (sugar > 0) {
             try {
-                await connection.execute('INSERT INTO visitlabchcyesur (pcucode, visitno, dtc, dateupdate) VALUES (?, ?, ?, NOW())', [p.pcucodeperson, vno, sugar]);
+                await connection.execute(
+                    'INSERT INTO visitlabchcyesur (pcucode, visitno, dtc, dateupdate) VALUES (?, ?, ?, NOW())',
+                    [p.pcucodeperson, vno, sugar]
+                );
             } catch (labError) {}
         }
 
-        // 3. โซนเด็ก (0-60 เดือน): บันทึกเข้าหน้า "โภชนาการ"
-        if (data.ageMonths !== undefined && data.ageMonths <= 60) {
+        // 5. โซนเด็ก (0-60 เดือน): บันทึกเข้าหน้า "โภชนาการ"
+        if (data.ageMonths !== undefined && data.ageMonths !== null && Number(data.ageMonths) <= 60) {
             try {
                 const headCircum = parseFloat(data.headCircum) || 0;
-                
-                // 🚨 จำลองลอจิก JHCIS: ถ้าส่งรหัส 99 (แปลผลไม่ได้) มา ให้เซฟลงฐานข้อมูลเป็น 3, Null, Null
-                const nlevel = data.nlevel === '99' ? '3' : (data.nlevel || '3'); 
-                const nlevel2 = data.nlevel === '99' ? null : (data.nlevel2 || '3'); 
-                const nlevel3 = data.nlevel === '99' ? null : (data.nlevel3 || '4'); 
-                const growdevelop = data.growdevelop || '1'; 
+                const nlevel = data.nlevel === '99' ? '3' : (data.nlevel || '3');
+                const nlevel2 = data.nlevel === '99' ? null : (data.nlevel2 || '3');
+                const nlevel3 = data.nlevel === '99' ? null : (data.nlevel3 || '4');
+                const growdevelop = data.growdevelop || '1';
 
-                await connection.execute(`
-                    INSERT INTO visitnutrition 
-                    (pcucode, visitno, weight, tall, headcycle, nlevel, nlevel2, nlevel3, growdevelop, dateupdate) 
+                await connection.execute(
+                    `INSERT INTO visitnutrition
+                    (pcucode, visitno, weight, tall, headcycle, nlevel, nlevel2, nlevel3, growdevelop, dateupdate)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                    ON DUPLICATE KEY UPDATE 
-                    weight = VALUES(weight), tall = VALUES(tall), headcycle = VALUES(headcycle), 
-                    nlevel = VALUES(nlevel), nlevel2 = VALUES(nlevel2), nlevel3 = VALUES(nlevel3), 
-                    growdevelop = VALUES(growdevelop), dateupdate = NOW()
-                `, [p.pcucodeperson, vno, weight, height, headCircum, nlevel, nlevel2, nlevel3, growdevelop]);
+                    ON DUPLICATE KEY UPDATE
+                    weight = VALUES(weight), tall = VALUES(tall), headcycle = VALUES(headcycle),
+                    nlevel = VALUES(nlevel), nlevel2 = VALUES(nlevel2), nlevel3 = VALUES(nlevel3),
+                    growdevelop = VALUES(growdevelop), dateupdate = NOW()`,
+                    [p.pcucodeperson, vno, weight, height, headCircum, nlevel, nlevel2, nlevel3, growdevelop]
+                );
             } catch (nutriErr) {
-                console.error("🔥 Warning: visitnutrition Error:", nutriErr.message);
+                console.error('🔥 Warning visitnutrition:', nutriErr.message);
             }
         }
 
-        // ==========================================
+        // 6. โซนบันทึก SpecialPP (บุหรี่, สุรา)
+        if (data.smokeStatus || data.alcoholStatus) {
+            try {
+                const ppCodes = [];
+                if (data.smokeStatus === 'ไม่สูบ') ppCodes.push('1B52');
+                else if (data.smokeStatus === 'เคยสูบแต่เลิกแล้ว') ppCodes.push('1B51');
+                else if (data.smokeStatus === 'ยังสูบอยู่') {
+                    ppCodes.push(data.smokeAmount || '1B509');
+                    if (data.smokeWake) ppCodes.push(data.smokeWake);
+                    if (data.smokeAdvice) ppCodes.push(data.smokeAdvice);
+                }
+
+                if (data.alcoholStatus === 'ไม่ดื่ม') ppCodes.push('1B600');
+                else if (data.alcoholStatus === 'เคยดื่มแต่เลิกแล้ว') ppCodes.push('1B601');
+                else if (data.alcoholStatus === 'ยังดื่มอยู่') {
+                    ppCodes.push('1B609');
+                    if (data.alcoholAdvice) ppCodes.push(data.alcoholAdvice);
+                }
+
+                for (const code of ppCodes) {
+                    if (!code) continue;
+                    await connection.execute(
+                        `INSERT INTO f43specialpp (pcucodeperson, pid, dateserv, ppspecial, pcucode, visitno, servplace, ppsplace, dateupdate)
+                         VALUES (?, ?, CURDATE(), ?, ?, ?, '1', ?, NOW())
+                         ON DUPLICATE KEY UPDATE visitno = VALUES(visitno), ppsplace = VALUES(ppsplace), dateupdate = NOW()`,
+                        [p.pcucodeperson, p.pid, code, p.pcucodeperson, vno, p.pcucodeperson]
+                    );
+                }
+            } catch (ppErr) {
+                console.error('🔥 Warning f43specialpp:', ppErr.message);
+            }
+        }
+
+        // 7. โซนคัดกรองมะเร็งเต้านม 1B0030
+        try {
+            await connection.execute(
+                `INSERT INTO f43specialpp (pcucodeperson, pid, dateserv, ppspecial, pcucode, visitno, servplace, ppsplace, dateupdate)
+                 SELECT pcucodeperson, pid, CURDATE(), '1B0030', ?, ?, '1', ?, NOW()
+                 FROM person
+                 WHERE idcard = ?
+                   AND sex = '2'
+                   AND TIMESTAMPDIFF(YEAR, birth, CURDATE()) BETWEEN 30 AND 70
+                 ON DUPLICATE KEY UPDATE
+                     visitno = VALUES(visitno),
+                     ppsplace = VALUES(ppsplace),
+                     dateupdate = NOW()`,
+                [p.pcucodeperson, vno, p.pcucodeperson, data.cid]
+            );
+        } catch (cancerErr) {
+            console.error('🔥 Warning 1B0030:', cancerErr.message);
+        }
+
+        // 8. บันทึก Log การใช้งาน Kiosk
+        try {
+            await connection.execute(
+                `INSERT INTO kiosk_usage_log (cid, vhv_cid, weight, height, sys_dia, pulse, temp, waist, sugar, search_date, sex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)`,
+                [data.cid, data.vhv_cid || null, weight, height, pressure, pulse, temp, waist, sugar, p.sex || null]
+            );
+        } catch (logErr) {}
+
+        res.json({ success: true, visitno: vno, message: 'บันทึกข้อมูลเข้า JHCIS สำเร็จ' });
+    } catch (err) {
+        console.error('❌ Queue API Error:', err);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+// ========================================== จบ API 1
+
+// ==========================================
 // API ค้นหารหัสโรค ICD-10 (ตาราง cdisease)
 // ==========================================
 app.get('/jhcis-api/search-icd10', checkApiKey, async (req, res) => {
@@ -193,15 +336,16 @@ app.get('/jhcis-api/search-icd10', checkApiKey, async (req, res) => {
         connection = await mysql.createConnection(dbConfig);
         const like = `%${q}%`;
         const [rows] = await connection.execute(
-            `SELECT diseasecode, diseasename, diseasenamethai 
-             FROM cdisease 
-             WHERE diseasecode LIKE ? OR diseasename LIKE ? OR diseasenamethai LIKE ? 
-             ORDER BY (diseasecode LIKE ?) DESC, diseasecode ASC 
+            `SELECT diseasecode, diseasename, diseasenamethai
+             FROM cdisease
+             WHERE diseasecode LIKE ? OR diseasename LIKE ? OR diseasenamethai LIKE ?
+             ORDER BY (diseasecode LIKE ?) DESC, diseasecode ASC
              LIMIT 30`,
             [like, like, like, `${q}%`]
         );
         res.json({ success: true, data: rows });
     } catch (err) {
+        console.error('❌ search-icd10 Error:', err.message);
         res.status(500).json({ success: false, message: err.message });
     } finally {
         if (connection) await connection.end();
@@ -226,18 +370,19 @@ app.get('/jhcis-api/search-drug', checkApiKey, async (req, res) => {
 
         const like = `%${q}%`;
         const [rows] = await connection.execute(
-            `SELECT drugcode, drugname, drugtype, 
-                    COALESCE(cost, 0) AS costprice, 
+            `SELECT drugcode, drugname, drugtype,
+                    COALESCE(cost, 0) AS costprice,
                     COALESCE(sell, 0) AS realprice,
                     COALESCE(unitsell, '') AS unitsell
-             FROM cdrug 
+             FROM cdrug
              WHERE (drugname LIKE ? OR drugcode LIKE ?) ${whereType}
-             ORDER BY drugname ASC 
+             ORDER BY drugname ASC
              LIMIT 35`,
             [like, like]
         );
         res.json({ success: true, data: rows });
     } catch (err) {
+        console.error('❌ search-drug Error:', err.message);
         res.status(500).json({ success: false, message: err.message });
     } finally {
         if (connection) await connection.end();
@@ -263,9 +408,9 @@ app.get('/jhcis-api/re-med/:cid', checkApiKey, async (req, res) => {
         let allergies = [];
         try {
             const [alRows] = await connection.execute(
-                `SELECT a.drugcode, COALESCE(c.drugname, a.drugcode) AS drugname 
-                 FROM personalergic a 
-                 LEFT JOIN cdrug c ON a.drugcode = c.drugcode 
+                `SELECT a.drugcode, COALESCE(c.drugname, a.drugcode) AS drugname
+                 FROM personalergic a
+                 LEFT JOIN cdrug c ON a.drugcode = c.drugcode
                  WHERE a.pid = ? AND a.pcucodeperson = ?`,
                 [pid, pcucodeperson]
             );
@@ -274,11 +419,11 @@ app.get('/jhcis-api/re-med/:cid', checkApiKey, async (req, res) => {
 
         // 2. หา visit ล่าสุดที่มีการจ่ายยา
         const [lastVisits] = await connection.execute(
-            `SELECT v.visitno, v.visitdate, v.diagnote 
-             FROM visit v 
-             INNER JOIN visitdrug vd ON v.pcucode = vd.pcucode AND v.visitno = vd.visitno 
-             WHERE v.pid = ? AND v.pcucodeperson = ? 
-             ORDER BY v.visitdate DESC, v.visitno DESC 
+            `SELECT v.visitno, v.visitdate, v.diagnote
+             FROM visit v
+             INNER JOIN visitdrug vd ON v.pcucode = vd.pcucode AND v.visitno = vd.visitno
+             WHERE v.pid = ? AND v.pcucodeperson = ?
+             ORDER BY v.visitdate DESC, v.visitno DESC
              LIMIT 1`,
             [pid, pcucodeperson]
         );
@@ -316,86 +461,174 @@ app.get('/jhcis-api/re-med/:cid', checkApiKey, async (req, res) => {
             allergies
         });
     } catch (err) {
+        console.error('❌ re-med Error:', err.message);
         res.status(500).json({ success: false, message: err.message });
     } finally {
         if (connection) await connection.end();
     }
 });
 
-        // ========================================================
-        // 🎗️ โซนบันทึก SpecialPP (บุหรี่, สุรา)
-        // ========================================================
-        if (data.smokeStatus || data.alcoholStatus) {
-            try {
-                const ppCodes = [];
-                if (data.smokeStatus === 'ไม่สูบ') ppCodes.push('1B52');
-                else if (data.smokeStatus === 'เคยสูบแต่เลิกแล้ว') ppCodes.push('1B51');
-                else if (data.smokeStatus === 'ยังสูบอยู่') {
-                    ppCodes.push(data.smokeAmount || '1B509');
-                    if (data.smokeWake) ppCodes.push(data.smokeWake); 
-                    if (data.smokeAdvice) ppCodes.push(data.smokeAdvice);
-                }
-                
-                if (data.alcoholStatus === 'ไม่ดื่ม') ppCodes.push('1B600');
-                else if (data.alcoholStatus === 'เคยดื่มแต่เลิกแล้ว') ppCodes.push('1B601');
-                else if (data.alcoholStatus === 'ยังดื่มอยู่') {
-                    ppCodes.push('1B609');
-                    if (data.alcoholAdvice) ppCodes.push(data.alcoholAdvice);
-                }
-
-                for (const code of ppCodes) {
-                    if (!code) continue; 
-                    await connection.execute(`
-                        INSERT INTO f43specialpp (pcucodeperson, pid, dateserv, ppspecial, pcucode, visitno, servplace, ppsplace, dateupdate) 
-                        VALUES (?, ?, CURDATE(), ?, ?, ?, '1', ?, NOW())
-                        ON DUPLICATE KEY UPDATE visitno = VALUES(visitno), ppsplace = VALUES(ppsplace), dateupdate = NOW()
-                    `, [p.pcucodeperson, p.pid, code, p.pcucodeperson, vno, p.pcucodeperson]);
-                }
-            } catch (ppErr) {
-                console.error("🔥 Warning f43specialpp:", ppErr.message);
-            }
-        }
-
-        // ========================================================
-        // 🎗️ โซนคัดกรองมะเร็งเต้านม 1B0030 (ประมวลผลใน MySQL อัตโนมัติ ปลอดภัย 100%)
-        // ========================================================
-        try {
-            await connection.execute(`
-                INSERT INTO f43specialpp (pcucodeperson, pid, dateserv, ppspecial, pcucode, visitno, servplace, ppsplace, dateupdate) 
-                SELECT pcucodeperson, pid, CURDATE(), '1B0030', ?, ?, '1', ?, NOW() 
-                FROM person 
-                WHERE idcard = ? 
-                  AND sex = '2' 
-                  AND TIMESTAMPDIFF(YEAR, birth, CURDATE()) BETWEEN 30 AND 70
-                ON DUPLICATE KEY UPDATE 
-                    visitno = VALUES(visitno), 
-                    ppsplace = VALUES(ppsplace), 
-                    dateupdate = NOW()
-            `, [p.pcucodeperson, vno, p.pcucodeperson, data.cid]);
-        } catch (cancerErr) {
-            console.error("🔥 Warning 1B0030:", cancerErr.message);
-        }
-
-        // ========================================================
-        // บันทึก Log การใช้งาน Kiosk
-        // ========================================================
-        try {
-            await connection.execute(`INSERT INTO kiosk_usage_log (cid, vhv_cid, weight, height, sys_dia, pulse, temp, waist, sugar, search_date, sex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)`, [data.cid, data.vhv_cid || null, weight, height, pressure, pulse, temp, waist, sugar, p.sex || null]);
-        } catch (logErr) {}
-
-        res.status(200).json({ success: true, message: 'บันทึกข้อมูลสำเร็จ' });
-
-    } catch (error) {
-        console.error('Database Error:', error);
-        res.status(500).json({ success: false, message: 'Server Error: ' + error.message });
+// ==========================================
+// API ดึงคิวตรวจวันนี้จาก JHCIS (สำหรับแถบ Sidebar ด้านซ้าย)
+// ==========================================
+app.get('/jhcis-api/today-queue', checkApiKey, async (req, res) => {
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [rows] = await connection.execute(`
+            SELECT
+                v.visitno,
+                v.visitdate,
+                v.pcucode,
+                v.pid,
+                p.idcard AS cid,
+                p.fname,
+                p.lname,
+                p.sex,
+                p.birth,
+                TIMESTAMPDIFF(MONTH, p.birth, CURDATE()) AS age_months,
+                v.rightcode,
+                v.rightno,
+                v.weight,
+                v.height,
+                v.pressure,
+                v.pulse,
+                v.temperature,
+                v.waist,
+                v.vitalcheck,
+                v.symptoms,
+                v.symptomsco,
+                v.diagnote,
+                v.timeservice,
+                (SELECT COUNT(*) FROM visitdiag vd WHERE vd.pcucode = v.pcucode AND vd.visitno = v.visitno) AS diag_count,
+                (SELECT COUNT(*) FROM visitdrug dr WHERE dr.pcucode = v.pcucode AND dr.visitno = v.visitno) AS drug_count,
+                (SELECT COUNT(*) FROM personalergic al WHERE al.pcucodeperson = v.pcucodeperson AND al.pid = v.pid) AS allergy_count
+            FROM visit v
+            INNER JOIN person p ON v.pcucodeperson = p.pcucodeperson AND v.pid = p.pid
+            WHERE v.visitdate = CURDATE()
+            ORDER BY v.visitno DESC
+            LIMIT 100
+        `);
+        res.json({ success: true, data: rows });
+    } catch (err) {
+        console.error('❌ today-queue Error:', err.message);
+        res.status(500).json({ success: false, message: err.message });
     } finally {
-        if (connection) await connection.end(); 
+        if (connection) await connection.end();
     }
 });
-// ========================================== จบ API 1
 
+// ==========================================
+// API ดึงรายละเอียด Visit ปัจจุบัน (เมื่อคลิกคนไข้จากแถบคิวซ้าย)
+// ==========================================
+app.get('/jhcis-api/visit-detail/:visitno', checkApiKey, async (req, res) => {
+    const visitno = parseInt(req.params.visitno, 10);
+    if (!visitno) return res.status(400).json({ success: false, message: 'visitno ไม่ถูกต้อง' });
 
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [vRows] = await connection.execute(
+            `SELECT v.*, p.idcard AS cid, p.fname, p.lname, p.sex, p.birth,
+                    TIMESTAMPDIFF(MONTH, p.birth, CURDATE()) AS age_months
+             FROM visit v
+             INNER JOIN person p ON v.pcucodeperson = p.pcucodeperson AND v.pid = p.pid
+             WHERE v.visitno = ? LIMIT 1`,
+            [visitno]
+        );
+        if (vRows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล visit' });
+        const v = vRows[0];
 
+        const [diags] = await connection.execute(
+            `SELECT d.diagcode, COALESCE(cd.diseasenamethai, cd.diseasename, '') AS diseasename,
+                    COALESCE(d.dxtype, '01') AS dxtype
+             FROM visitdiag d
+             LEFT JOIN cdisease cd ON d.diagcode = cd.diseasecode
+             WHERE d.pcucode = ? AND d.visitno = ?`,
+            [v.pcucode, visitno]
+        );
+
+        const [drugs] = await connection.execute(
+            `SELECT vd.drugcode, COALESCE(c.drugname, vd.drugcode) AS drugname,
+                    vd.unit, vd.realprice, vd.costprice, COALESCE(vd.dose, '') AS dose
+             FROM visitdrug vd
+             LEFT JOIN cdrug c ON vd.drugcode = c.drugcode
+             WHERE vd.pcucode = ? AND vd.visitno = ?`,
+            [v.pcucode, visitno]
+        );
+
+        let allergies = [];
+        try {
+            const [alRows] = await connection.execute(
+                `SELECT a.drugcode, COALESCE(c.drugname, a.drugcode) AS drugname
+                 FROM personalergic a
+                 LEFT JOIN cdrug c ON a.drugcode = c.drugcode
+                 WHERE a.pid = ? AND a.pcucodeperson = ?`,
+                [v.pid, v.pcucodeperson]
+            );
+            allergies = alRows;
+        } catch (e) {}
+
+        res.json({ success: true, visit: v, diags, drugs, allergies });
+    } catch (err) {
+        console.error('❌ visit-detail Error:', err.message);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+// ==========================================
+// API ดึงประวัติการรับบริการย้อนหลัง 10 ครั้ง (สำหรับแท็บ "ประวัติ")
+// ==========================================
+app.get('/jhcis-api/patient-history/:cid', checkApiKey, async (req, res) => {
+    const cid = String(req.params.cid || '').trim();
+    let connection;
+    try {
+        connection = await mysql.createConnection(dbConfig);
+        const [pRows] = await connection.execute(
+            'SELECT pid, pcucodeperson FROM person WHERE idcard = ? LIMIT 1',
+            [cid]
+        );
+        if (pRows.length === 0) return res.json({ success: true, data: [] });
+        const { pid, pcucodeperson } = pRows[0];
+
+        const [visits] = await connection.execute(
+            `SELECT v.visitno, v.visitdate, v.pressure, v.weight, v.height, v.symptoms, v.diagnote
+             FROM visit v
+             WHERE v.pid = ? AND v.pcucodeperson = ?
+             ORDER BY v.visitdate DESC, v.visitno DESC
+             LIMIT 10`,
+            [pid, pcucodeperson]
+        );
+
+        const result = [];
+        for (const v of visits) {
+            const [diags] = await connection.execute(
+                `SELECT d.diagcode, COALESCE(cd.diseasenamethai, cd.diseasename, '') AS diseasename
+                 FROM visitdiag d
+                 LEFT JOIN cdisease cd ON d.diagcode = cd.diseasecode
+                 WHERE d.pcucode = ? AND d.visitno = ?`,
+                [pcucodeperson, v.visitno]
+            );
+            const [drugs] = await connection.execute(
+                `SELECT vd.drugcode, COALESCE(c.drugname, vd.drugcode) AS drugname, vd.unit
+                 FROM visitdrug vd
+                 LEFT JOIN cdrug c ON vd.drugcode = c.drugcode
+                 WHERE vd.pcucode = ? AND vd.visitno = ?`,
+                [pcucodeperson, v.visitno]
+            );
+            result.push({ ...v, diags, drugs });
+        }
+
+        res.json({ success: true, data: result });
+    } catch (err) {
+        console.error('❌ patient-history Error:', err.message);
+        res.status(500).json({ success: false, message: err.message });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
 
 // ==========================================
 // 🎯 API 2: ดึงประวัติคนไข้ JHCIS (เพิ่มคำนวณอายุเดือน)

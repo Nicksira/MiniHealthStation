@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
+import { StaffClinicalWorkspace } from './StaffClinicalWorkspace';
 import Swal from 'sweetalert2';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
@@ -331,9 +332,12 @@ function App() {
   const [drugSearch, setDrugSearch] = useState<string>('');
   const [drugResults, setDrugResults] = useState<any[]>([]);
   const [drugList, setDrugList] = useState<{ drugcode: string; drugname: string; unit: number; realprice: number; costprice: number; dose: string; recorder: string }[]>([]);
+  const [activeVisitNo, setActiveVisitNo] = useState<number | null>(null);
+  const [queueRefreshTrigger, setQueueRefreshTrigger] = useState<number>(0);
 
   // ฟังก์ชันล้างข้อมูลโซนแพทย์เมื่อเปลี่ยนคนไข้
   const resetClinicalOrderFields = () => {
+    setActiveVisitNo(null);
     setDiagNote('');
     setIcd10List([]);
     setIcdSearch('');
@@ -345,6 +349,119 @@ function App() {
     setDrugSearch('');
     setDrugResults([]);
     setDrugList([]);
+  };
+
+  // โหลดเคสเมื่อเจ้าหน้าที่คลิกคนไข้จากแถบคิวตรวจวันนี้ด้านซ้าย (JHCIS)
+  const handleSelectQueuePatient = async (queueRow: any) => {
+    setLoading(true);
+    try {
+      setActiveVisitNo(queueRow.visitno);
+      const [patRes, detailRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/jhcis-api/patient/${queueRow.cid}`, { headers: { 'x-api-key': API_KEY } }).catch(() => null),
+        axios.get(`${API_BASE_URL}/jhcis-api/visit-detail/${queueRow.visitno}`, { headers: { 'x-api-key': API_KEY } })
+      ]);
+
+      if (patRes?.data?.success) {
+        setPatient({ ...patRes.data.data, cid: queueRow.cid });
+      } else {
+        setPatient({
+          cid: queueRow.cid,
+          fname: queueRow.fname,
+          lname: queueRow.lname,
+          sex: queueRow.sex,
+          age_months: queueRow.age_months,
+          chronic: 'กำลังตรวจสอบประวัติ...'
+        });
+      }
+
+      if (detailRes.data?.success) {
+        const v = detailRes.data.visit;
+        const w = Number(v.weight) || 0;
+        const h = Number(v.height) || 0;
+        const bmiVal = w > 0 && h > 0 ? (w / Math.pow(h / 100, 2)).toFixed(2) : '---';
+
+        let parsedSugar = '---';
+        let parsedFasting = '';
+        if (v.vitalcheck && typeof v.vitalcheck === 'string') {
+          const dtxMatch = v.vitalcheck.match(/DTX:\s*([\d.]+)/i);
+          if (dtxMatch) parsedSugar = dtxMatch[1];
+          if (v.vitalcheck.includes('ไม่งดน้ำ-อาหาร')) parsedFasting = 'ไม่งดน้ำ-อาหาร';
+          else if (v.vitalcheck.includes('งดน้ำ-อาหาร')) parsedFasting = 'งดน้ำ-อาหาร';
+        }
+
+        setVitals({
+          weight: w > 0 ? String(w) : '---',
+          height: h > 0 ? String(h) : '---',
+          waist: Number(v.waist) > 0 ? String(v.waist) : '---',
+          bmi: bmiVal,
+          temp: Number(v.temperature) > 0 ? String(v.temperature) : '---',
+          spo2: '---',
+          sysDia: v.pressure ? String(v.pressure) : '---',
+          pulse: Number(v.pulse) > 0 ? String(v.pulse) : '---',
+          sugar: parsedSugar,
+          headCircum: '---'
+        });
+
+        setSugarFasting(parsedFasting);
+        setCustomSymptoms(v.symptoms || '');
+        setCustomSymptomsco(v.symptomsco || '');
+        setDiagNote(v.diagnote || '');
+        setTimeService(v.timeservice === '2' ? '2' : '1');
+        setDrugAllergies(detailRes.data.allergies || []);
+
+        const ppList: string[] = Array.isArray(detailRes.data.specialpp) ? detailRes.data.specialpp : [];
+        if (ppList.includes('1B52')) setSmokeStatus('ไม่สูบ');
+        else if (ppList.includes('1B51')) setSmokeStatus('เคยสูบแต่เลิกแล้ว');
+        else if (ppList.some(c => c.startsWith('1B50'))) {
+          setSmokeStatus('ยังสูบอยู่');
+          const amt = ppList.find(c => ['1B501', '1B502', '1B503', '1B509'].includes(c));
+          if (amt) setSmokeAmount(amt);
+          const wake = ppList.find(c => ['1B504', '1B505', '1B506'].includes(c));
+          setSmokeWake(wake || '');
+          setSmokeAdvice(ppList.includes('1B530') ? '1B530' : '');
+        } else {
+          setSmokeStatus('');
+        }
+
+        if (ppList.includes('1B600')) setAlcoholStatus('ไม่ดื่ม');
+        else if (ppList.includes('1B601')) setAlcoholStatus('เคยดื่มแต่เลิกแล้ว');
+        else if (ppList.includes('1B609')) {
+          setAlcoholStatus('ยังดื่มอยู่');
+          setAlcoholAdvice(ppList.includes('1B611') ? '1B611' : '');
+        } else {
+          setAlcoholStatus('');
+        }
+
+        setIcd10List(
+          (detailRes.data.diags || []).map((d: any) => ({
+            diagcode: d.diagcode,
+            diseasename: d.diseasename || '',
+            dxtype: d.dxtype || '01',
+            conti: d.conti || '0',
+            appointDate: ''
+          }))
+        );
+
+        setDrugList(
+          (detailRes.data.drugs || []).map((d: any) => ({
+            drugcode: d.drugcode,
+            drugname: d.drugname,
+            unit: Number(d.unit) || 1,
+            realprice: Number(d.realprice) || 0,
+            costprice: Number(d.costprice) || 0,
+            dose: d.dose || '',
+            recorder: currentVhv?.name || 'เจ้าหน้าที่'
+          }))
+        );
+      }
+
+      await fetchPatientPhoto(queueRow.cid);
+      setIsLoggedIn(true);
+    } catch (e) {
+      Swal.fire('ไม่สามารถโหลดข้อมูลคิวได้', 'กรุณาตรวจสอบการเชื่อมต่อฐานข้อมูล JHCIS', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ค้นหา ICD-10 แบบ Real-time
@@ -518,6 +635,20 @@ function App() {
   const [selectedBpRecord, setSelectedBpRecord] = useState<any>(null);
   const [followUpNote, setFollowUpNote] = useState('');
   const [referStatus, setReferStatus] = useState(''); // 👈 เพิ่มตัวแปรเก็บสถานะ Refer
+
+  // โหลดประวัติแพ้ยาอัตโนมัติเมื่อเจ้าหน้าที่เปิดผู้ป่วยรายใหม่
+  useEffect(() => {
+    if (isStaffLoggedIn && patient?.cid && !activeVisitNo) {
+      axios
+        .get(`${API_BASE_URL}/jhcis-api/re-med/${patient.cid}`, { headers: { 'x-api-key': API_KEY } })
+        .then(res => {
+          if (res.data?.success && Array.isArray(res.data.allergies)) {
+            setDrugAllergies(res.data.allergies);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isStaffLoggedIn, patient?.cid, activeVisitNo]);
 
   // ฟังก์ชันดึงข้อมูลความดัน
   const fetchBPData = async (dateStr: string) => {
@@ -1418,23 +1549,32 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
       });
 
       if (foundVhv) {
+        const trimmedCid = vhvIdInput.trim();
         const vhvName = foundVhv.name || foundVhv['ชื่อ- นามสกุล'] || 'อสม.';
-        setCurrentVhv({ cid: vhvIdInput, name: vhvName });
+        setCurrentVhv({ cid: trimmedCid, name: vhvName });
         setShowVhvLoginModal(false);
         setVhvIdInput('');
-        
+
         // 🌟 เช็คว่าเป็นเจ้าหน้าที่ (Staff) หรือไม่
         const staffCids = ['3251000441639', '1259700107058', '1279800022828'];
-        const isStaff = staffCids.includes(vhvIdInput.trim());
+        const isStaff = staffCids.includes(trimmedCid);
         const roleTitle = isStaff ? 'เจ้าหน้าที่' : 'อสม.';
 
-        Swal.fire({ 
-            title: `เข้าสู่ระบบ${roleTitle}`, 
-            text: `ยินดีต้อนรับ ${roleTitle} ${vhvName}`, 
-            icon: 'success', 
-            timer: 2000, 
-            showConfirmButton: false 
+        // ✅ ถ้าเป็นเจ้าหน้าที่ ให้เด้งเข้าหน้าโต๊ะตรวจ (คิวตรวจวันนี้) ทันที
+        if (isStaff) {
+          setPatient(null);
+          resetClinicalOrderFields();
+          setIsLoggedIn(true);
+        }
+
+        Swal.fire({
+          title: `เข้าสู่ระบบ${roleTitle}`,
+          text: `ยินดีต้อนรับ ${roleTitle} ${vhvName}`,
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false
         });
+      
       } else {
         setVhvLoginError('ไม่พบข้อมูล อสม. ท่านนี้ในระบบ (ลองเช็คเลขอีกครั้ง)');
       }
@@ -1528,6 +1668,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
     const needBreastCancerScreening = isFemale && ageYears >= 30 && ageYears <= 70;
 
     const payload = {
+      visitno: isStaffLoggedIn ? activeVisitNo : null,
       cid: patient.cid,
       vhv_cid: currentVhv ? currentVhv.cid : null,
       isStaff: isStaffLoggedIn,
@@ -1569,6 +1710,20 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
       });
 
       if (response.data || response.status === 200) {
+        if (isStaffLoggedIn) {
+          setIsSubmitting(false);
+          if (response.data?.visitno) setActiveVisitNo(response.data.visitno);
+          setQueueRefreshTrigger(prev => prev + 1);
+          Swal.fire({
+            title: 'บันทึกเข้า JHCIS สำเร็จ!',
+            text: `SEQ ${response.data?.visitno || activeVisitNo || ''} บันทึกเรียบร้อยแล้ว`,
+            icon: 'success',
+            timer: 1600,
+            showConfirmButton: false
+          });
+          return;
+        }
+
         setIsSubmitting(false);
         speak('บันทึกข้อมูลและจัดคิวเข้าสู่ระบบสำเร็จ ขอบคุณที่ใช้บริการค่ะ');
         
@@ -1879,7 +2034,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
       </header>
 
       {/* 🔴 โค้ดเดิม: ปุ่มกลับหน้าแรกของคนไข้ */}
-      {isLoggedIn && !showSettings && (
+      {isLoggedIn && !showSettings && !isStaffLoggedIn && (
         <button 
           onClick={handleLogout}
           style={{
@@ -2379,8 +2534,100 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
               ไม่มีบัตรประชาชนแตะที่ปุ่มนี้
             </button>
 
+            {isStaffLoggedIn && (
+              <button
+                onClick={() => setIsLoggedIn(true)}
+                style={{
+                  padding: '12px 35px',
+                  background: '#007AFF',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  boxShadow: '0 4px 12px rgba(0, 122, 255, 0.35)',
+                  fontSize: '16px',
+                  transition: 'transform 0.2s'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+              >
+                <i className="fa-solid fa-table-columns" style={{ marginRight: '8px' }}></i>
+                เปิดโต๊ะตรวจเจ้าหน้าที่ (ดูคิว JHCIS วันนี้)
+              </button>
+            )}
+
           </div>
         </main>
+      ) : isStaffLoggedIn ? (
+        <StaffClinicalWorkspace
+          apiBaseUrl={API_BASE_URL}
+          apiKey={API_KEY}
+          hospName={config.hospName}
+          currentVhv={currentVhv}
+          patient={patient}
+          patientImage={patientImage}
+          isUploadingPhoto={isUploadingPhoto}
+          onCapturePhoto={handleCapturePhoto}
+          activeVisitNo={activeVisitNo}
+          onSelectQueuePatient={handleSelectQueuePatient}
+          queueRefreshTrigger={queueRefreshTrigger}
+          customSymptoms={customSymptoms}
+          setCustomSymptoms={setCustomSymptoms}
+          customSymptomsco={customSymptomsco}
+          setCustomSymptomsco={setCustomSymptomsco}
+          diagNote={diagNote}
+          setDiagNote={setDiagNote}
+          vitals={vitals}
+          handleVitalChange={handleVitalChange}
+          childDev={childDev}
+          setChildDev={setChildDev}
+          sugarFasting={sugarFasting}
+          setSugarFasting={setSugarFasting}
+          smokeStatus={smokeStatus}
+          setSmokeStatus={setSmokeStatus}
+          smokeAmount={smokeAmount}
+          setSmokeAmount={setSmokeAmount}
+          smokeWake={smokeWake}
+          setSmokeWake={setSmokeWake}
+          smokeAdvice={smokeAdvice}
+          setSmokeAdvice={setSmokeAdvice}
+          alcoholStatus={alcoholStatus}
+          setAlcoholStatus={setAlcoholStatus}
+          alcoholAdvice={alcoholAdvice}
+          setAlcoholAdvice={setAlcoholAdvice}
+          icd10List={icd10List}
+          setIcd10List={setIcd10List}
+          icdSearch={icdSearch}
+          icdResults={icdResults}
+          handleSearchIcd10={handleSearchIcd10}
+          handleAddIcd10={handleAddIcd10}
+          timeService={timeService}
+          setTimeService={setTimeService}
+          foodAllergy={foodAllergy}
+          setFoodAllergy={setFoodAllergy}
+          drugAllergies={drugAllergies}
+          drugCategory={drugCategory}
+          setDrugCategory={setDrugCategory}
+          drugSearch={drugSearch}
+          drugResults={drugResults}
+          handleSearchDrug={handleSearchDrug}
+          handleAddDrug={handleAddDrug}
+          drugList={drugList}
+          setDrugList={setDrugList}
+          handleReMed={handleReMed}
+          onOpenPresetModal={(target) => { setPresetSearch(''); setNewPresetInput(''); setPresetModalTarget(target); }}
+          onOpenManualId={() => { setShowManualIdModal(true); setManualIdInput(''); setManualIdError(''); }}
+          onManualCardRead={handleManualRead}
+          onOpenGuide={openGuideModal}
+          onOpenBluetooth={() => setShowBluetoothModal(true)}
+          onOpenTelemed={() => setShowTelemedModal(true)}
+          onSaveQueue={sendToJHCISQueue}
+          onLogoutToHome={handleLogout}
+          aiLoading={aiLoading}
+          aiResponse={aiResponse}
+          healthAnalysis={healthAnalysis}
+        />
       ) : (
         <main className="dashboard-screen" style={{ flex: 1, overflowY: 'auto', paddingBottom: '15vh' }}>
           
