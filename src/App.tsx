@@ -2553,7 +2553,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                 onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
               >
                 <i className="fa-solid fa-table-columns" style={{ marginRight: '8px' }}></i>
-                เปิดโต๊ะตรวจเจ้าหน้าที่ (ดูคิว JHCIS วันนี้)
+                JHCIS NHSO Digital Platform
               </button>
             )}
 
