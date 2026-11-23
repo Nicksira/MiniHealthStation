@@ -2552,7 +2552,7 @@ setSmokeStatus(''); setAlcoholStatus(''); setSmokeAmount('1B509'); setSmokeWake(
                 onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
                 onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
               >
-                <i className="fa-solid fa-table-columns" style={{ marginRight: '8px' }}></i>
+                <i className="fa-brands fa-windows" style={{ marginRight: '8px' }}></i>
                 JHCIS NHSO Digital Platform
               </button>
             )}
